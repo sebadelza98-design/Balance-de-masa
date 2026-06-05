@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Balance de Masa — Agua Industrial</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg:    #0f172a;
+  --surf:  #1e293b;
+  --surf2: #293548;
+  --bord:  rgba(148,163,184,0.18);
+  --txt:   #e2e8f0;
+  --muted: #94a3b8;
+  --blue:  #38bdf8;
+  --green: #4ade80;
+  --red:   #f87171;
+  --amber: #fbbf24;
+  --indigo:#818cf8;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;min-height:100vh}
+
+header{background:var(--surf);border-bottom:1px solid var(--bord);padding:11px 20px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100}
+header h1{font-size:1.05rem;font-weight:700;color:var(--blue)}
+header .sub{font-size:0.78rem;color:var(--muted)}
+.spacer{flex:1}
+
+.tabs{background:var(--surf);border-bottom:1px solid var(--bord);display:flex;padding:0 16px;overflow-x:auto;gap:2px}
+.tab-btn{padding:9px 15px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);cursor:pointer;font-size:0.83rem;font-weight:500;white-space:nowrap;transition:color .15s,border-color .15s}
+.tab-btn:hover{color:var(--txt)}
+.tab-btn.active{color:var(--blue);border-bottom-color:var(--blue)}
+
+.content{padding:18px;max-width:1100px;margin:0 auto}
+.pane{display:none}.pane.active{display:block}
+
+.card{background:var(--surf);border:1px solid var(--bord);border-radius:10px;padding:16px;margin-bottom:14px}
+.card-title{font-size:0.88rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+
+table{width:100%;border-collapse:collapse}
+th{background:var(--surf2);color:var(--muted);padding:7px 11px;text-align:left;font-size:0.75rem;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--bord)}
+td{padding:6px 11px;border-bottom:1px solid rgba(148,163,184,0.07);font-size:0.84rem}
+tr:hover td{background:rgba(255,255,255,0.025)}
+.overflow{overflow-x:auto}
+
+input[type=number]{background:var(--surf2);border:1px solid var(--bord);border-radius:5px;color:var(--txt);padding:4px 8px;width:100%;font-size:0.83rem;transition:border-color .15s}
+input[type=number]:focus{outline:none;border-color:var(--blue)}
+input.unk{border-color:var(--amber);color:var(--amber)}
+
+.btn{padding:7px 16px;border-radius:6px;border:none;cursor:pointer;font-size:0.83rem;font-weight:600;transition:opacity .15s}
+.btn:hover{opacity:.85}
+.btn-primary{background:var(--blue);color:#0f172a}
+.btn-ghost{background:var(--surf2);color:var(--txt);border:1px solid var(--bord)}
+
+.badge{display:inline-block;padding:2px 7px;border-radius:999px;font-size:0.71rem;font-weight:600}
+.bg{background:rgba(56,189,248,.14);color:var(--blue)}
+.gg{background:rgba(74,222,128,.14);color:var(--green)}
+.gr{background:rgba(248,113,113,.14);color:var(--red)}
+.ga{background:rgba(251,191,36,.14);color:var(--amber)}
+.gi{background:rgba(129,140,248,.14);color:var(--indigo)}
+.gm{background:rgba(148,163,184,.12);color:var(--muted)}
+
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px;margin-bottom:14px}
+.metric{background:var(--surf);border:1px solid var(--bord);border-radius:8px;padding:13px}
+.mlabel{font-size:0.73rem;color:var(--muted);margin-bottom:3px}
+.mval{font-size:1.3rem;font-weight:700}
+.mc{color:var(--blue)}.mr{color:var(--red)}.mg{color:var(--green)}.ma{color:var(--amber)}.mi{color:var(--indigo)}
+.mcap{font-size:0.72rem;color:var(--muted);margin-top:2px}
+
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.bar-lbl{width:190px;font-size:0.79rem;text-align:right;flex-shrink:0;color:var(--muted)}
+.bar-track{flex:1;background:var(--surf2);border-radius:3px;height:14px;overflow:hidden}
+.bar-fill{height:100%;background:var(--red);border-radius:3px;transition:width .4s}
+.bar-val{width:120px;font-size:0.79rem;color:var(--txt);flex-shrink:0}
+
+.sep{border:none;border-top:1px solid var(--bord);margin:14px 0}
+.stitle{font-size:0.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:14px 0 7px;font-weight:600}
+.cap{font-size:0.77rem;color:var(--muted);margin-top:5px;line-height:1.5}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+
+.file-wrap{display:none}
+.file-lbl{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;background:var(--surf2);border:1px solid var(--bord);border-radius:6px;cursor:pointer;font-size:0.83rem;transition:border-color .15s}
+.file-lbl:hover{border-color:var(--blue)}
+
+#toast{position:fixed;bottom:18px;right:18px;background:var(--surf);border:1px solid var(--bord);border-radius:8px;padding:9px 14px;font-size:0.82rem;opacity:0;transition:opacity .2s;pointer-events:none;z-index:999;max-width:280px}
+#toast.show{opacity:1}
+
+@media(max-width:600px){.bar-lbl{width:110px;font-size:.72rem}.metrics{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+<header>
+  <span>💧</span>
+  <h1>Balance de Masa</h1>
+  <span class="sub">Planta de Tratamiento de Agua</span>
+  <div class="spacer"></div>
+  <button class="btn btn-ghost" onclick="clearAll()" style="margin-right:6px">↺ Limpiar</button>
+  <button class="btn btn-primary" onclick="runSolver()">⚖️ Calcular Balance</button>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="showTab('datos',this)">📥 Caudales</button>
+  <button class="tab-btn" onclick="showTab('estanques',this)">♒ Estanques</button>
+  <button class="tab-btn" onclick="showTab('balance',this)">⚖️ Balance</button>
+  <button class="tab-btn" onclick="showTab('diagnostico',this)">🎯 Diagnóstico</button>
+  <button class="tab-btn" onclick="showTab('perdidas',this)">💧 Pérdidas</button>
+</div>
+
+<div class="content">
+
+<!-- ─── TAB CAUDALES ─── -->
+<div id="pane-datos" class="pane active">
+  <div class="card">
+    <div class="card-title">📂 Cargar desde Excel</div>
+    <div class="row">
+      <label class="file-lbl" for="xlFile">📎 Seleccionar .xlsx</label>
+      <input type="file" id="xlFile" class="file-wrap" accept=".xlsx,.xls" onchange="onExcel(event)">
+      <span id="xlName" style="color:var(--muted);font-size:0.8rem">Ningún archivo</span>
+    </div>
+    <p class="cap" style="margin-top:9px">
+      Hoja <strong>Flujos</strong>: columnas <code>Corriente</code> y <code>Caudal_m3d</code>.<br>
+      Hoja <strong>Estanques</strong> (opcional): <code>Estanque</code>, <code>Nivel_Ini_m</code>, <code>Nivel_Fin_m</code>, <code>Area_m2</code>.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">
+      📋 Corrientes
+      <span id="knownBadge" class="badge bg" style="margin-left:auto">0 conocidas</span>
+    </div>
+    <div class="overflow">
+      <table>
+        <thead><tr>
+          <th>ID</th><th>Corriente</th><th>Tipo</th>
+          <th style="width:140px">Caudal (m³/d)</th><th>Estado</th>
+        </tr></thead>
+        <tbody id="flowsBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ─── TAB ESTANQUES ─── -->
+<div id="pane-estanques" class="pane">
+  <div class="card">
+    <div class="card-title">♒ Niveles de estanques</div>
+    <p class="cap">Acumulación [m³/d] = (Nivel_fin − Nivel_ini) × Área × 24 / Δt</p>
+    <hr class="sep">
+    <div class="overflow">
+      <table>
+        <thead><tr>
+          <th>Estanque</th>
+          <th>Nivel ini (m)</th><th>Nivel fin (m)</th>
+          <th>Área (m²)</th><th>Δt (h)</th>
+          <th>Acum (m³/d)</th>
+        </tr></thead>
+        <tbody id="tanksBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ─── TAB BALANCE ─── -->
+<div id="pane-balance" class="pane">
+  <div id="globalMetrics" class="metrics"></div>
+  <div class="card">
+    <div class="card-title">🏭 Balance por nodo</div>
+    <div class="overflow">
+      <table>
+        <thead><tr>
+          <th>Equipo</th>
+          <th>Entradas (m³/d)</th><th>Salidas (m³/d)</th>
+          <th>Acum (m³/d)</th><th>Residual</th><th>Estado</th>
+        </tr></thead>
+        <tbody id="balanceBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ─── TAB DIAGNÓSTICO ─── -->
+<div id="pane-diagnostico" class="pane">
+  <div id="diagContent">
+    <div class="card" style="text-align:center;padding:32px;color:var(--muted)">
+      Pulsa <strong>⚖️ Calcular Balance</strong> para ver el diagnóstico de corrientes faltantes.
+    </div>
+  </div>
+</div>
+
+<!-- ─── TAB PÉRDIDAS ─── -->
+<div id="pane-perdidas" class="pane">
+  <div id="lossMetrics" class="metrics"></div>
+  <div class="card">
+    <div class="card-title">📊 Ranking de rechazos</div>
+    <div id="lossChart" style="padding:6px 0"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">💧 Recuperación WUR</div>
+    <div id="recoveryContent"></div>
+  </div>
+</div>
+
+</div><!-- /content -->
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════
+// TOPOLOGÍA
+// ═══════════════════════════════════════
+const NODOS = [
+  { id:"Captacion",  nombre:"Captación (Pozos + Agua Andina)",
+    entradas:["Pozo_5","Pozo_6","Pozo_7","Agua_Andina"], salidas:["Feed_Azud"],        estanque:"TK300" },
+  { id:"Azud",       nombre:"Filtro Azud",
+    entradas:["Feed_Azud"],              salidas:["Rechazo_Azud","Feed_Multimedia"],   estanque:"LB04"  },
+  { id:"Multimedia", nombre:"Filtro Multimedia",
+    entradas:["Feed_Multimedia"],        salidas:["Rechazo_Multimedia","Feed_AGPlus"], estanque:"LB05"  },
+  { id:"AG_Plus",    nombre:"AG Plus (Carbón Activado)",
+    entradas:["Feed_AGPlus"],            salidas:["Rechazo_AGPlus","Feed_UF"],         estanque:"LB02"  },
+  { id:"UF",         nombre:"UF (Ultrafiltración)",
+    entradas:["Feed_UF"],                salidas:["Rechazo_UF","Permeado_UF"]                          },
+  { id:"RO",         nombre:"RO (Ósmosis Inversa)",
+    entradas:["Permeado_UF","PTR_RO"],   salidas:["Rechazo_RO","TK7200_Produccion"],  estanque:"TK7200"},
+  { id:"WUR1",       nombre:"WUR 1",
+    entradas:["Rechazo_RO"],             salidas:["Rechazo_WUR1","Permeado_WUR1"],     estanque:"LB03"  },
+  { id:"WUR2",       nombre:"WUR 2",
+    entradas:["Permeado_WUR1"],          salidas:["Rechazo_WUR2","Permeado_WUR2"]                      },
+  { id:"Produccion", nombre:"Distribución / Producción",
+    entradas:["TK7200_Produccion","Permeado_WUR2"], salidas:["TK200_Produccion"],      estanque:"TK200" },
+];
+
+const TANK_DEFS = [
+  {id:"TK300", nombre:"TK-300 (Agua Cruda)"},
+  {id:"LB04",  nombre:"LB-04"},
+  {id:"LB05",  nombre:"LB-05"},
+  {id:"LB02",  nombre:"LB-02"},
+  {id:"TK7200",nombre:"TK-7200"},
+  {id:"LB03",  nombre:"LB-03"},
+  {id:"TK200", nombre:"TK-200 (Producción)"},
+];
+
+// Build unique stream definitions from topology
+const SDEFS = {};
+function tipoDef(id){
+  if(id.startsWith("Rechazo"))  return {tipo:"rechazo",  cls:"gr"};
+  if(["Pozo_5","Pozo_6","Pozo_7","Agua_Andina"].includes(id)) return {tipo:"entrada",   cls:"bg"};
+  if(id.startsWith("TK200_") || id.startsWith("Permeado")) return {tipo:"producto",  cls:"gg"};
+  if(id==="PTR_RO") return {tipo:"recircul.", cls:"gi"};
+  return {tipo:"normal", cls:"gm"};
+}
+NODOS.forEach(n=>[...n.entradas,...n.salidas].forEach(id=>{
+  if(!SDEFS[id]) SDEFS[id]={id, nombre:id.replace(/_/g," "), ...tipoDef(id)};
+}));
+
+// ═══════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════
+const S = {
+  flows: Object.fromEntries(Object.keys(SDEFS).map(k=>[k,null])),
+  tanks: Object.fromEntries(TANK_DEFS.map(t=>[t.id,{h0:0,h1:0,area:0,dt:24}])),
+  solved: null,
+};
+
+// ═══════════════════════════════════════
+// ACCUMULACIÓN
+// ═══════════════════════════════════════
+function getAcum(){
+  const a={};
+  TANK_DEFS.forEach(({id})=>{
+    const t=S.tanks[id];
+    a[id]=(t.area>0&&t.dt>0) ? (t.h1-t.h0)*t.area*24/t.dt : 0;
+  });
+  return a;
+}
+
+// ═══════════════════════════════════════
+// SOLVER ITERATIVO
+// ═══════════════════════════════════════
+function runSolver(){
+  const acum=getAcum();
+  const f={...S.flows};
+  const TOL=5;
+
+  let changed=true, iter=0;
+  while(changed && iter<120){
+    changed=false; iter++;
+    for(const n of NODOS){
+      const acc=acum[n.estanque]||0;
+      const ui=n.entradas.filter(s=>f[s]==null);
+      const uo=n.salidas.filter(s=>f[s]==null);
+      if(ui.length+uo.length!==1) continue;
+      const si=n.entradas.reduce((a,s)=>a+(f[s]||0),0);
+      const so=n.salidas.reduce((a,s)=>a+(f[s]||0),0);
+      const res=si-so-acc;
+      if(ui.length===1){f[ui[0]]=Math.max(0,res);  changed=true;}
+      else             {f[uo[0]]=Math.max(0,-res); changed=true;}
+    }
+  }
+
+  // Residuals
+  const res={};
+  NODOS.forEach(n=>{
+    const acc=acum[n.estanque]||0;
+    res[n.id]=n.entradas.reduce((a,s)=>a+(f[s]||0),0)
+             -n.salidas.reduce((a,s)=>a+(f[s]||0),0)
+             -acc;
+  });
+
+  // Global
+  const allIn=new Set(), allOut=new Set();
+  NODOS.forEach(n=>{n.entradas.forEach(s=>allIn.add(s));n.salidas.forEach(s=>allOut.add(s));});
+  const extIn =[...allIn ].filter(s=>!allOut.has(s));
+  const extOut=[...allOut].filter(s=>!allIn.has(s));
+  const totIn =extIn .reduce((a,s)=>a+(f[s]||0),0);
+  const totOut=extOut.reduce((a,s)=>a+(f[s]||0),0);
+  const totAcum=Object.values(acum).reduce((a,v)=>a+v,0);
+  const err=totIn-totOut-totAcum;
+
+  S.solved={f,res,acum,totIn,totOut,totAcum,err,TOL};
+  renderBalance(); renderDiag(); renderLosses();
+  showTabById('balance');
+  toast("Balance calculado","green");
+}
+
+// ═══════════════════════════════════════
+// MISSING STREAMS
+// ═══════════════════════════════════════
+function suggestMissing(){
+  const f=S.flows;
+  const acum=getAcum();
+  const out=[];
+  for(const [sid,def] of Object.entries(SDEFS)){
+    if(f[sid]!=null) continue;
+    let inferible=false,val=null,nodoNombre=null;
+    for(const n of NODOS){
+      const all=[...n.entradas,...n.salidas];
+      if(!all.includes(sid)) continue;
+      if(all.filter(s=>f[s]==null).length===1){
+        const acc=acum[n.estanque]||0;
+        const si=n.entradas.filter(s=>s!==sid).reduce((a,s)=>a+(f[s]||0),0);
+        const so=n.salidas.filter(s=>s!==sid).reduce((a,s)=>a+(f[s]||0),0);
+        const r=si-so-acc;
+        val=n.entradas.includes(sid)?r:-r;
+        inferible=true; nodoNombre=n.nombre; break;
+      }
+    }
+    let unlock=0;
+    if(!inferible){
+      for(const n of NODOS){
+        const all=[...n.entradas,...n.salidas];
+        if(all.includes(sid) && all.filter(s=>f[s]==null).length===2) unlock++;
+      }
+    }
+    out.push({sid,nombre:def.nombre,tipo:def.tipo,cls:def.cls,
+              inferible,val:val!=null?Math.round(val*100)/100:null,
+              nodoNombre,unlock});
+  }
+  out.sort((a,b)=>(a.inferible?0:1)-(b.inferible?0:1)||b.unlock-a.unlock||a.sid.localeCompare(b.sid));
+  return out;
+}
+
+// ═══════════════════════════════════════
+// EXCEL READER
+// ═══════════════════════════════════════
+function onExcel(evt){
+  const file=evt.target.files[0]; if(!file) return;
+  document.getElementById("xlName").textContent=file.name;
+  const rd=new FileReader();
+  rd.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:"array"});
+      let n=0;
+      if(wb.SheetNames.includes("Flujos")){
+        XLSX.utils.sheet_to_json(wb.Sheets["Flujos"]).forEach(row=>{
+          const id=(row["Corriente"]||"").toString().trim().replace(/\s+/g,"_");
+          const v=parseFloat(row["Caudal_m3d"]);
+          if(id in S.flows && !isNaN(v)){S.flows[id]=v; n++;}
+        });
+      }
+      if(wb.SheetNames.includes("Estanques")){
+        XLSX.utils.sheet_to_json(wb.Sheets["Estanques"]).forEach(row=>{
+          const id=(row["Estanque"]||"").toString().trim();
+          if(id in S.tanks){
+            const t=S.tanks[id];
+            if(row["Nivel_Ini_m"]!=null) t.h0=parseFloat(row["Nivel_Ini_m"]);
+            if(row["Nivel_Fin_m"]!=null) t.h1=parseFloat(row["Nivel_Fin_m"]);
+            if(row["Area_m2"]    !=null) t.area=parseFloat(row["Area_m2"]);
+          }
+        });
+        renderTanks();
+      }
+      renderFlows();
+      toast(n+" corrientes cargadas","green");
+    }catch(err){toast("Error Excel: "+err.message,"red");}
+  };
+  rd.readAsArrayBuffer(file);
+}
+
+// ═══════════════════════════════════════
+// RENDER: CAUDALES
+// ═══════════════════════════════════════
+function renderFlows(){
+  const known=Object.values(S.flows).filter(v=>v!=null).length;
+  document.getElementById("knownBadge").textContent=`${known} / ${Object.keys(SDEFS).length} conocidas`;
+  document.getElementById("flowsBody").innerHTML=
+    Object.entries(SDEFS).map(([id,d])=>{
+      const v=S.flows[id];
+      const unk=v==null;
+      return`<tr>
+        <td style="font-family:monospace;color:var(--muted);font-size:0.77rem">${id}</td>
+        <td>${d.nombre}</td>
+        <td><span class="badge ${d.cls}">${d.tipo}</span></td>
+        <td><input type="number" min="0" step="0.1"
+          value="${unk?"":v}" placeholder="? incógnita"
+          class="${unk?"unk":""}"
+          oninput="onFC('${id}',this)" style="max-width:120px"></td>
+        <td id="st-${id}">${unk
+          ?'<span class="badge ga">❓ Incógnita</span>'
+          :'<span class="badge gg">✅ Conocida</span>'}</td>
+      </tr>`;
+    }).join("");
+}
+
+function onFC(id,inp){
+  const v=inp.value.trim();
+  S.flows[id]=v===""||isNaN(parseFloat(v))?null:parseFloat(v);
+  inp.className=S.flows[id]==null?"unk":"";
+  const el=document.getElementById("st-"+id);
+  if(el) el.innerHTML=S.flows[id]==null
+    ?'<span class="badge ga">❓ Incógnita</span>'
+    :'<span class="badge gg">✅ Conocida</span>';
+  const known=Object.values(S.flows).filter(v=>v!=null).length;
+  document.getElementById("knownBadge").textContent=`${known} / ${Object.keys(SDEFS).length} conocidas`;
+}
+
+// ═══════════════════════════════════════
+// RENDER: ESTANQUES
+// ═══════════════════════════════════════
+function acumVal(id){
+  const t=S.tanks[id];
+  return (t.area>0&&t.dt>0)?(t.h1-t.h0)*t.area*24/t.dt:null;
+}
+function renderTanks(){
+  document.getElementById("tanksBody").innerHTML=
+    TANK_DEFS.map(({id,nombre})=>{
+      const t=S.tanks[id];
+      const a=acumVal(id);
+      const aStr=a!=null?a.toFixed(1):"—";
+      const aColor=a==null?"var(--muted)":a>0?"var(--green)":a<0?"var(--red)":"var(--muted)";
+      return`<tr>
+        <td style="font-weight:500">${nombre}</td>
+        <td><input type="number" step="0.01" value="${t.h0}" oninput="upTank('${id}','h0',this)" style="max-width:90px"></td>
+        <td><input type="number" step="0.01" value="${t.h1}" oninput="upTank('${id}','h1',this)" style="max-width:90px"></td>
+        <td><input type="number" step="1"    value="${t.area}" oninput="upTank('${id}','area',this)" style="max-width:90px"></td>
+        <td><input type="number" step="0.5"  value="${t.dt}"   oninput="upTank('${id}','dt',this)"   style="max-width:70px"></td>
+        <td id="ac-${id}" style="font-weight:600;color:${aColor}">${aStr}</td>
+      </tr>`;
+    }).join("");
+}
+
+function upTank(id,f,inp){
+  S.tanks[id][f]=parseFloat(inp.value)||0;
+  const el=document.getElementById("ac-"+id); if(!el) return;
+  const a=acumVal(id);
+  el.textContent=a!=null?a.toFixed(1):"—";
+  el.style.color=a==null?"var(--muted)":a>0?"var(--green)":a<0?"var(--red)":"var(--muted)";
+}
+
+// ═══════════════════════════════════════
+// RENDER: BALANCE
+// ═══════════════════════════════════════
+function renderBalance(){
+  if(!S.solved) return;
+  const {f,res,acum,totIn,totOut,totAcum,err,TOL}=S.solved;
+  const ok=Math.abs(err)<=TOL;
+
+  document.getElementById("globalMetrics").innerHTML=`
+    <div class="metric"><div class="mlabel">Entradas ext.</div>
+      <div class="mval mc">${totIn.toFixed(1)}</div><div class="mcap">m³/d</div></div>
+    <div class="metric"><div class="mlabel">Salidas ext.</div>
+      <div class="mval">${totOut.toFixed(1)}</div><div class="mcap">m³/d</div></div>
+    <div class="metric"><div class="mlabel">Acumulación</div>
+      <div class="mval mi">${totAcum.toFixed(1)}</div><div class="mcap">m³/d</div></div>
+    <div class="metric"><div class="mlabel">Error global</div>
+      <div class="mval ${ok?"mg":"mr"}">${err.toFixed(1)}</div>
+      <div class="mcap">${ok?"✅ CIERRA":"❌ NO CIERRA"}</div></div>`;
+
+  document.getElementById("balanceBody").innerHTML=NODOS.map(n=>{
+    const r=res[n.id]||0;
+    const acc=acum[n.estanque]||0;
+    const si=n.entradas.reduce((a,s)=>a+(f[s]||0),0);
+    const so=n.salidas.reduce((a,s)=>a+(f[s]||0),0);
+    const cl=Math.abs(r)<=TOL;
+    return`<tr>
+      <td style="font-weight:500">${n.nombre}</td>
+      <td>${si.toFixed(2)}</td><td>${so.toFixed(2)}</td>
+      <td style="color:var(--indigo)">${acc.toFixed(2)}</td>
+      <td style="font-weight:600;color:${cl?"var(--green)":"var(--red)"}">${r>0?"+":""}${r.toFixed(2)}</td>
+      <td>${cl?'<span class="badge gg">✅ Cierra</span>'
+              :`<span class="badge gr">❌ ${r>0?"+":""}${r.toFixed(1)}</span>`}</td>
+    </tr>`;
+  }).join("");
+}
+
+// ═══════════════════════════════════════
+// RENDER: DIAGNÓSTICO
+// ═══════════════════════════════════════
+function renderDiag(){
+  const ms=suggestMissing();
+  const inf=ms.filter(x=>x.inferible);
+  const med=ms.filter(x=>!x.inferible);
+  let html="";
+
+  if(ms.length===0){
+    html=`<div class="card" style="text-align:center;padding:32px">
+      <div style="font-size:2rem">✅</div>
+      <p style="margin-top:8px;color:var(--green)">Todas las corrientes están medidas.</p></div>`;
+  } else {
+    if(inf.length){
+      html+=`<div class="card">
+        <div class="card-title">✅ Calculables por diferencia — sin instrumento extra (${inf.length})</div>
+        <p class="cap" style="margin-bottom:10px">Estas corrientes se infieren haciendo cierre en su nodo.</p>
+        <div class="overflow"><table>
+          <thead><tr><th>ID</th><th>Corriente</th><th>Tipo</th><th>Nodo de cierre</th><th>Valor (m³/d)</th></tr></thead>
+          <tbody>${inf.map(x=>`<tr>
+            <td style="font-family:monospace;font-size:0.78rem">${x.sid}</td>
+            <td>${x.nombre}</td>
+            <td><span class="badge ${x.cls}">${x.tipo}</span></td>
+            <td style="color:var(--muted);font-size:0.81rem">${x.nodoNombre}</td>
+            <td style="font-weight:700;color:var(--green)">${x.val!=null?x.val.toFixed(2):"—"}</td>
+          </tr>`).join("")}</tbody>
+        </table></div></div>`;
+    }
+    if(med.length){
+      html+=`<div class="card">
+        <div class="card-title">📡 Requieren caudalímetro — ordenadas por impacto (${med.length})</div>
+        <p class="cap" style="margin-bottom:10px">Medir primero las de mayor "Nodos desbloqueados" — permiten calcular más corrientes en cadena.</p>
+        <div class="overflow"><table>
+          <thead><tr><th>ID</th><th>Corriente</th><th>Tipo</th><th style="text-align:center">Nodos desbloqueados</th></tr></thead>
+          <tbody>${med.map(x=>`<tr>
+            <td style="font-family:monospace;font-size:0.78rem">${x.sid}</td>
+            <td>${x.nombre}</td>
+            <td><span class="badge ${x.cls}">${x.tipo}</span></td>
+            <td style="text-align:center">${x.unlock>0
+              ?`<span class="badge ga">${x.unlock} nodo${x.unlock>1?"s":""}</span>`
+              :'<span style="color:var(--muted)">—</span>'}</td>
+          </tr>`).join("")}</tbody>
+        </table></div></div>`;
+    }
+  }
+  document.getElementById("diagContent").innerHTML=html;
+}
+
+// ═══════════════════════════════════════
+// RENDER: PÉRDIDAS
+// ═══════════════════════════════════════
+function renderLosses(){
+  const f=S.solved?S.solved.f:S.flows;
+  const losses=Object.entries(SDEFS)
+    .filter(([,d])=>d.tipo==="rechazo")
+    .map(([id,d])=>({id,nombre:d.nombre,v:f[id]||0}))
+    .filter(l=>l.v>0)
+    .sort((a,b)=>b.v-a.v);
+
+  const totLoss=losses.reduce((a,l)=>a+l.v,0);
+  const totIn=S.solved?S.solved.totIn:0;
+  const pct=totIn>0?totLoss/totIn*100:0;
+
+  const wur1=f["Permeado_WUR1"]||0;
+  const wur2=f["Permeado_WUR2"]||0;
+  const rec=wur1+wur2;
+  const pctRec=totLoss>0?rec/totLoss*100:0;
+
+  document.getElementById("lossMetrics").innerHTML=`
+    <div class="metric"><div class="mlabel">Total rechazos</div>
+      <div class="mval mr">${totLoss.toFixed(1)}</div><div class="mcap">m³/d</div></div>
+    <div class="metric"><div class="mlabel">% de entradas</div>
+      <div class="mval ${pct>20?"mr":"ma"}">${pct.toFixed(1)}%</div></div>
+    <div class="metric"><div class="mlabel">Recuperado WUR</div>
+      <div class="mval mg">${rec.toFixed(1)}</div><div class="mcap">m³/d</div></div>
+    <div class="metric"><div class="mlabel">% Recuperación</div>
+      <div class="mval mc">${pctRec.toFixed(1)}%</div><div class="mcap">sobre rechazos</div></div>`;
+
+  const mx=losses[0]?.v||1;
+  document.getElementById("lossChart").innerHTML=losses.length
+    ?losses.map((l,i)=>`
+      <div class="bar-row">
+        <div class="bar-lbl">${i+1}. ${l.nombre}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(l.v/mx*100).toFixed(0)}%"></div></div>
+        <div class="bar-val">${l.v.toFixed(1)} m³/d · ${totLoss>0?(l.v/totLoss*100).toFixed(0):0}%</div>
+      </div>`).join("")
+    :`<p style="color:var(--muted);padding:12px">No hay rechazos medidos aún.</p>`;
+
+  document.getElementById("recoveryContent").innerHTML=`
+    <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px">
+      <div><div class="stitle">Permeado WUR1 + WUR2</div>
+        <span style="font-weight:700;color:var(--green);font-size:1.1rem">${rec.toFixed(1)} m³/d</span>
+        <span style="color:var(--muted);font-size:0.8rem"> (${wur1.toFixed(1)} + ${wur2.toFixed(1)})</span></div>
+      <div><div class="stitle">Eficiencia WUR sobre rechazos</div>
+        <span style="font-weight:700;color:var(--blue);font-size:1.1rem">${pctRec.toFixed(1)}%</span></div>
+    </div>
+    <div class="bar-track" style="height:8px;max-width:360px">
+      <div class="bar-fill" style="background:var(--green);width:${Math.min(100,pctRec).toFixed(0)}%"></div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════
+function showTab(id,btn){
+  document.querySelectorAll(".pane").forEach(p=>p.classList.remove("active"));
+  document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+  document.getElementById("pane-"+id).classList.add("active");
+  if(btn) btn.classList.add("active");
+}
+function showTabById(id){
+  document.querySelectorAll(".pane").forEach(p=>p.classList.remove("active"));
+  document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+  document.getElementById("pane-"+id).classList.add("active");
+  const btns=document.querySelectorAll(".tab-btn");
+  const map={datos:0,estanques:1,balance:2,diagnostico:3,perdidas:4};
+  if(btns[map[id]]) btns[map[id]].classList.add("active");
+}
+function clearAll(){
+  Object.keys(S.flows).forEach(k=>S.flows[k]=null);
+  S.solved=null;
+  renderFlows();
+  document.getElementById("globalMetrics").innerHTML="";
+  document.getElementById("balanceBody").innerHTML="";
+  document.getElementById("diagContent").innerHTML=
+    `<div class="card" style="text-align:center;padding:32px;color:var(--muted)">
+      Pulsa <strong>⚖️ Calcular Balance</strong> para ver el diagnóstico.</div>`;
+  renderLosses();
+  toast("Datos limpiados","");
+}
+let _tid;
+function toast(msg,color){
+  const el=document.getElementById("toast");
+  el.textContent=msg;
+  el.style.borderColor=color==="green"?"var(--green)":color==="red"?"var(--red)":"var(--bord)";
+  el.classList.add("show");
+  clearTimeout(_tid);
+  _tid=setTimeout(()=>el.classList.remove("show"),2800);
+}
+
+// ═══════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════
+renderFlows();
+renderTanks();
+renderDiag();
+renderLosses();
+</script>
+</body>
+</html>
