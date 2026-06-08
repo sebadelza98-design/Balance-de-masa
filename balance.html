@@ -223,6 +223,7 @@ const S = {
   sheets: {},        // name -> { grid, axis:'h'|'v', dateCols:[{date,label,key}], headerRow }
   sheetOrder: [],
   labelIndex: {},    // norm(label) -> {sheet, idx}
+  labelWarnings: [], // etiquetas duplicadas detectadas al indexar
   primary: null,
   range: { from:0, to:0 },
   rangeDates: { start:null, end:null },
@@ -263,8 +264,10 @@ function getNodos(){
 
     { id:"Multimedia", nombre:"Filtros Multimedia",
       entradas:["UF_Permeado"],
-      salidas:["Feed_Nano","Rechazo_Multimedia"],
-      estanque:"LB05" },
+      salidas:["Feed_Nano","Rechazo_Multimedia","Desaireadores"],
+      estanque:"LB05",
+      noValidado:true,
+      noValidadoMsg:"Reparto LB-02 no definido — nano+desaireadores > multimedia (topología incompleta)" },
 
     { id:"Abatidores", nombre:"Abatidores As (LB-04 → LB-05)",
       entradas:[], salidas:[], estanque:"LB02", estructural:true },
@@ -272,7 +275,8 @@ function getNodos(){
     { id:"Nano", nombre:"Nanofiltración (NF)",
       entradas:["Feed_Nano"],
       salidas:["Permeado_Nano","Rechazo_Nano"],
-      noValidado:true },
+      noValidado:true,
+      noValidadoMsg:"Permeado inferido (sin medidor independiente)" },
 
     { id:"WUR1", nombre:"WUR 1 (recupera rechazo NF)",
       entradas:["WUR1_Entrada"],
@@ -289,7 +293,7 @@ function getNodos(){
       estanque:"LB03" },
 
     { id:"Produccion", nombre:"Producción (TK-7200 + RO→TK-200)",
-      entradas:["Desaireadores","RO_TK200", ...(dest==="Produccion"?wurRet:[])],
+      entradas:["Permeado_Nano","Desaireadores","RO_TK200", ...(dest==="Produccion"?wurRet:[])],
       salidas:["Agua_Producto"],
       estanque:"TK7200" },
   ];
@@ -299,8 +303,8 @@ function getNodos(){
 const STREAM_METRO = {
   "Pozos":              "Consumo pozos",
   "Agua_Potable":       "Agua Potable (25%)",
-  "Feed_Pretrat":       { l:"UF entrada", tot:true },
-  "UF_Salida":          { l:"UF salida",  tot:true },
+  "Feed_Pretrat":       "Consumo Entrada",
+  "UF_Salida":          "Consumo salida",
   "Rechazo_Azud":       "Retrolavado F. Azud",
   "Rechazo_AGPlus":     "Retroavado F. AG PLUS",
   "Rechazo_Multimedia": "Retrolavado FFMM",
@@ -314,7 +318,7 @@ const STREAM_METRO = {
   "WUR2_Rechazo":       "WUR 2 Rechazo",
   "Drenaje_NanoWUR":    "DIF RECHAZO - WUR",
   "Desaireadores":      "Desaireadores",
-  "PTR_LB03":           { l:"Envio PTR a LB03", tot:true },
+  "PTR_LB03":           "M3 enviados",
   "LB03_Total":         "Agua servicio",
   "LB02_Total":         "Total LB02",
   "RO_TK200":           ["Permeado RO Grande","Permeado RO Pequeña"],
@@ -438,20 +442,39 @@ function detectAxis(ws, grid){
 
 function buildLabelIndex(){
   S.labelIndex = {};
+  S.labelWarnings = [];
+  function addLabel(k, sheet, idx){
+    if(!k) return;
+    if(k in S.labelIndex){
+      const e = S.labelIndex[k];
+      if(e.sheet!==sheet || e.idx!==idx)
+        S.labelWarnings.push(`"${k}" ya indexada en hoja "${e.sheet}" idx ${e.idx}; ignorada en "${sheet}" idx ${idx}`);
+    } else {
+      S.labelIndex[k] = {sheet, idx};
+    }
+  }
   for(const name of S.sheetOrder){
     const sh = S.sheets[name];
     if(sh.axis==="v"){
-      const row = sh.grid[sh.headerRow]||[];
-      for(let c=0; c<row.length; c++){
-        const v=row[c];
-        if(typeof v==="string" && v.trim()){ const k=norm(v); if(k && !(k in S.labelIndex)) S.labelIndex[k]={sheet:name,idx:c}; }
+      // Indexar TODAS las filas anteriores al primer dato; rellenar celdas combinadas
+      const firstData = sh.dateCols.length ? sh.dateCols[0].key : sh.grid.length;
+      for(let r=0; r<firstData; r++){
+        const row = sh.grid[r]||[];
+        let last = null;
+        for(let c=0; c<row.length; c++){
+          let v = row[c];
+          if(typeof v==="string" && v.trim()) last = v;
+          else if(v==null) v = last;   // relleno por combinación de celdas
+          else last = null;
+          if(v && typeof v==="string" && v.trim()) addLabel(norm(v), name, c);
+        }
       }
     } else if(sh.axis==="h"){
       for(let r=0; r<sh.grid.length; r++){
         const row=sh.grid[r]||[]; const lim=Math.min(LABEL_COLS,row.length);
         for(let c=0; c<lim; c++){
           const v=row[c];
-          if(typeof v==="string" && v.trim()){ const k=norm(v); if(k && !(k in S.labelIndex)) S.labelIndex[k]={sheet:name,idx:r}; }
+          if(typeof v==="string" && v.trim()) addLabel(norm(v), name, r);
         }
       }
     }
@@ -816,8 +839,11 @@ function renderDiag(){
 
   items.push({cls:"info", msg:`Hojas: ${S.sheetOrder.map(n=>n+" ["+(S.sheets[n].axis||"?")+"]").join(", ")} · calendario: ${S.primary}`});
 
-  // verificación totalizadores clave
-  items.push({cls:"info", msg:`Totalizadores → Feed UF: ${fmt(val("Feed_Pretrat"))} · UF salida: ${fmt(val("UF_Salida"))} · PTR→LB-03: ${fmt(val("PTR_LB03"))} m³`});
+  for(const w of (S.labelWarnings||[]))
+    items.push({cls:"warn", msg:`Índice etiquetas: ${w}`});
+
+  // verificación lecturas clave
+  items.push({cls:"info", msg:`Lecturas clave → Feed UF: ${fmt(val("Feed_Pretrat"))} · UF salida: ${fmt(val("UF_Salida"))} · PTR→LB-03: ${fmt(val("PTR_LB03"))} m³`});
 
   // medidores faltantes
   for(const sid of Object.keys(STREAM_METRO)){
@@ -830,7 +856,7 @@ function renderDiag(){
     if(b.status==="medidor") items.push({cls:"bad", msg:`${n.nombre}: salidas (${fmt(b.sSum)}) &gt; entrada (${fmt(b.eSum)}) → medidor sospechoso, NO pérdida física (${fmtPct(b.pct)}).`});
     else if(b.status==="bad") items.push({cls:"bad", msg:`${n.nombre}: desviación alta ${fmtPct(b.pct)} (${fmt(b.err)} m³).`});
     else if(b.status==="warn") items.push({cls:"warn", msg:`${n.nombre}: desviación ${fmtPct(b.pct)} — revisar.`});
-    else if(b.status==="novalidado") items.push({cls:"info", msg:`${n.nombre}: permeado inferido (sin medidor independiente) → no validado.`});
+    else if(b.status==="novalidado") items.push({cls:"info", msg:`${n.nombre}: ${n.noValidadoMsg||"topología no validada"} → NO VALIDADO.`});
     else if(b.status==="ok") items.push({cls:"ok", msg:`${n.nombre}: cierre OK (${fmtPct(b.pct)}).`});
   });
 
