@@ -44,6 +44,7 @@ tr:last-child td{border-bottom:none}
 .num{text-align:right;font-variant-numeric:tabular-nums}
 .ok{color:var(--green)} .warn{color:var(--amber)} .bad{color:var(--red)} .info{color:var(--indigo)}
 .calc-tag{font-size:9px;background:rgba(129,140,248,.18);color:var(--indigo);padding:1px 5px;border-radius:4px;margin-left:5px}
+.tot-tag{font-size:9px;background:rgba(56,189,248,.18);color:var(--blue);padding:1px 5px;border-radius:4px;margin-left:5px}
 
 .balance-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px}
 .bcard{background:#0f172a;border-radius:8px;padding:12px;text-align:center}
@@ -80,12 +81,11 @@ select,input[type=number]{background:var(--bg);color:var(--txt);border:1px solid
 .b-warn{background:rgba(251,191,36,.15);color:var(--amber)}
 .b-bad{background:rgba(248,113,113,.15);color:var(--red)}
 .b-info{background:rgba(129,140,248,.15);color:var(--indigo)}
-.b-meter{background:rgba(56,189,248,.15);color:var(--blue)}
 </style>
 </head>
 <body>
 <h1>⚖️ Balance de Masa — Agua Industrial</h1>
-<p class="subtitle">Planta de tratamiento · Topología por nodos en serie · Lee Excel (METROSCUB + Uso agua LB04)</p>
+<p class="subtitle">Topología por nodos en serie · Lectura multi-hoja (METROSCUB + Uso agua LB04) · medidores diarios y totalizadores</p>
 
 <div class="tabs">
   <div class="tab active" onclick="showTab('datos')">📂 Datos</div>
@@ -101,13 +101,13 @@ select,input[type=number]{background:var(--bg);color:var(--txt);border:1px solid
   <div class="card upload-zone" onclick="document.getElementById('fileInput').click()">
     <div style="font-size:2rem">📊</div>
     <div style="margin-top:8px;font-size:15px;font-weight:600">Cargar archivo Excel</div>
-    <div style="margin-top:4px;font-size:12px;color:var(--dim)">Lee todas las hojas (METROSCUB, Uso agua LB04, …)</div>
+    <div style="margin-top:4px;font-size:12px;color:var(--dim)">Lee todas las hojas (orientación horizontal o vertical)</div>
     <div class="upload-btn">Seleccionar archivo</div>
     <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="onExcel(event)">
   </div>
 
   <div class="card" id="dateCard" style="display:none">
-    <div class="card-title">📅 Rango de fechas — suma de días</div>
+    <div class="card-title">📅 Rango de fechas</div>
     <div class="date-row">
       <label>Desde</label>
       <select id="dateFrom" onchange="onRange()"></select>
@@ -116,28 +116,16 @@ select,input[type=number]{background:var(--bg);color:var(--txt);border:1px solid
       <span id="dayCount" class="day-badge">0 días</span>
     </div>
     <p id="rangeCap" class="cap"></p>
-    <p class="cap" style="color:var(--amber);margin-top:4px">⚠️ Valores negativos en la hoja (errores de tipeo) se ignoran al sumar.</p>
-  </div>
-
-  <div class="card" id="cfgCard" style="display:none">
-    <div class="card-title">⚙️ Configuración del modelo</div>
-    <div class="date-row">
-      <label>Destino permeado WUR (recirculación)</label>
-      <select id="wurDest" onchange="onConfig()">
-        <option value="TK300">TK-300 — retorno a captación</option>
-        <option value="LB03">LB-03 — agua de servicio</option>
-      </select>
-    </div>
-    <p class="cap">Define si el permeado recuperado por WUR1/WUR2 retorna a captación (recirculación interna, no se cuenta como producto) o se contabiliza en LB-03 (servicio).</p>
+    <p class="cap" style="color:var(--amber);margin-top:4px">⚠️ Valores negativos se ignoran al sumar. <span class="tot-tag">tot</span> = totalizador: valor = último − primero del rango (usa ≥2 días).</p>
   </div>
 
   <div class="card" id="flowsCard" style="display:none">
     <div class="card-title">Caudales leídos (m³ · período)</div>
     <table>
-      <thead><tr><th>Corriente</th><th>Etiqueta / hoja</th><th class="num">m³</th></tr></thead>
+      <thead><tr><th>Corriente</th><th>Etiqueta / tipo</th><th class="num">m³</th></tr></thead>
       <tbody id="flowsTbody"></tbody>
     </table>
-    <p class="cap" style="margin-top:8px"><span class="calc-tag">calc</span> = corriente inferida por cierre de nodo (sin medidor propio).</p>
+    <p class="cap" style="margin-top:8px"><span class="calc-tag">calc</span> = inferida por cierre de nodo · <span class="tot-tag">tot</span> = totalizador (último − primero).</p>
   </div>
 </div>
 
@@ -145,7 +133,7 @@ select,input[type=number]{background:var(--bg);color:var(--txt);border:1px solid
 <div id="tab-estanques" class="tab-content">
   <div class="card">
     <div class="card-title">Acumulación en estanques · ΔV = ΔNivel × Área</div>
-    <p class="cap" style="margin-bottom:12px;color:var(--amber)">⚠️ Las áreas son valores de referencia — edítalas con las dimensiones reales de cada estanque.</p>
+    <p class="cap" style="margin-bottom:12px;color:var(--amber)">⚠️ Ingresa el área real (m²) y los niveles del período. Sin área, ΔV no se calcula (no hay valores precargados).</p>
     <table>
       <thead><tr><th>Estanque</th><th>Área (m²)</th><th>Nivel ini (m)</th><th>Nivel fin (m)</th><th class="num">ΔV (m³)</th></tr></thead>
       <tbody id="tankTbody"></tbody>
@@ -156,14 +144,14 @@ select,input[type=number]{background:var(--bg);color:var(--txt);border:1px solid
 <!-- ═══════════════ TAB BALANCE ═══════════════ -->
 <div id="tab-balance" class="tab-content">
   <div class="card">
-    <div class="card-title">Conservación global · Entradas frescas = Producto + Servicio + Drenajes + ΔV</div>
+    <div class="card-title">Conservación global · Frescas = Producto + Servicio + Drenajes + ΔV</div>
     <div class="balance-row" id="balanceCards"></div>
     <div id="balanceDiag"></div>
   </div>
   <div class="card">
-    <div class="card-title">KPI recuperación de agua</div>
+    <div class="card-title">KPI de recuperación</div>
     <div class="balance-row" id="kpiCards"></div>
-    <p class="cap">Eficiencia = agua recuperada (WUR1 + WUR2 + PTR→LB-03) ÷ Pozos. Meta 75 %.</p>
+    <p class="cap">Recuperación interna = (WUR1 + WUR2 + PTR→LB-03) ÷ Pozos. Recuperación de planta = (LB-02 + LB-03) ÷ Pozos, meta 75 %.</p>
   </div>
   <div class="card">
     <div class="card-title">Balance por nodo</div>
@@ -183,7 +171,7 @@ select,input[type=number]{background:var(--bg);color:var(--txt);border:1px solid
 <!-- ═══════════════ TAB PÉRDIDAS ═══════════════ -->
 <div id="tab-perdidas" class="tab-content">
   <div class="card">
-    <div class="card-title">Drenajes / pérdidas reales — ordenados de mayor a menor</div>
+    <div class="card-title">Drenajes / pérdidas reales — mayor a menor</div>
     <p class="cap" style="margin-bottom:12px">Sólo corrientes que abandonan la planta (no recirculadas).</p>
     <div id="lossList"></div>
   </div>
@@ -200,28 +188,26 @@ select,input[type=number]{background:var(--bg);color:var(--txt);border:1px solid
 <script>
 // ═════════════════════════ STATE ═════════════════════════
 const S = {
-  sheets: {},        // name -> { grid, dateRow, dateCols:[{col,date,label}] }
+  sheets: {},        // name -> { grid, axis:'h'|'v', dateCols:[{date,label,key}], headerRow }
   sheetOrder: [],
-  labelIndex: {},    // norm(label) -> {sheet,row,col}
-  primary: null,     // sheet used for the date selector
+  labelIndex: {},    // norm(label) -> {sheet, idx}
+  primary: null,
   range: { from:0, to:0 },
   rangeDates: { start:null, end:null },
   flows: {},
-  crossBebida: null,
-  tanks: {},
-  config: { wurDest:"TK300" }
+  crossProd: null,
+  tanks: {}
 };
 
-const TOL = 5; // % tolerancia de cierre por nodo
+const TOL = 5;            // % tolerancia de cierre por nodo
+const LABEL_COLS = 12;    // columnas escaneadas para etiquetas (hojas horizontales)
 
 // ═════════════════════════ TOPOLOGÍA ═════════════════════════
-// Cadena en serie: Captación → UF → Multimedia → Abatidores → Nano → (WUR1/WUR2) → Producción
+// Cadena en serie. WUR permeados recirculan a TK-300 (sin flag). LB-03 = PTR (in) + servicio (out).
 function getNodos(){
-  const wurRet = ["WUR1_Permeado","WUR2_Permeado"];
-  const toCap  = S.config.wurDest === "TK300";
   return [
     { id:"Captacion", nombre:"Captación + Azud + AG+",
-      entradas:["Pozos","Agua_Potable", ...(toCap?wurRet:[])],
+      entradas:["Pozos","Agua_Potable","WUR1_Permeado","WUR2_Permeado"],
       salidas:["Rechazo_Azud","Rechazo_AGPlus","Feed_Pretrat"],
       estanque:"TK300" },
 
@@ -236,8 +222,7 @@ function getNodos(){
       estanque:"LB05" },
 
     { id:"Abatidores", nombre:"Abatidores As (LB-04 → LB-05)",
-      entradas:[], salidas:[], estanque:"LB02",
-      estructural:true },
+      entradas:[], salidas:[], estanque:"LB02", estructural:true },
 
     { id:"Nano", nombre:"Nanofiltración (NF)",
       entradas:["Feed_Nano"],
@@ -246,30 +231,30 @@ function getNodos(){
 
     { id:"WUR1", nombre:"WUR 1 (recupera rechazo NF)",
       entradas:["WUR1_Entrada"],
-      salidas:["WUR1_Permeado","WUR1_Rechazo"],
-      estanque:"LB03" },
+      salidas:["WUR1_Permeado","WUR1_Rechazo"] },
 
     { id:"WUR2", nombre:"WUR 2 (recupera CIP)",
       entradas:["WUR2_Entrada"],
       salidas:["WUR2_Permeado","WUR2_Rechazo"] },
 
-    { id:"PTR", nombre:"Tren PTR → RO-PTR → LB-03",
-      entradas:[], salidas:["PTR_LB03"],
-      estructural:true },
+    { id:"LB03", nombre:"LB-03 (PTR → servicio)",
+      entradas:["PTR_LB03"],
+      salidas:["LB03_Total"],
+      estanque:"LB03" },
 
-    { id:"Produccion", nombre:"Producción / Distribución",
-      entradas:["Permeado_Nano","Desaireadores", ...(toCap?[]:wurRet)],
+    { id:"Produccion", nombre:"Producción (TK-7200 + RO→TK-200)",
+      entradas:["Desaireadores","RO_TK200"],
       salidas:["Agua_Producto"],
       estanque:"TK7200" },
   ];
 }
 
-// corriente -> etiqueta(s) en el Excel (cualquier hoja)
+// corriente -> etiqueta(s). Objeto {l,tot:true} = totalizador (último − primero).
 const STREAM_METRO = {
   "Pozos":              "Consumo pozos",
   "Agua_Potable":       "Agua Potable (25%)",
-  "Feed_Pretrat":       "UF entrada",
-  "UF_Salida":          "UF salida",
+  "Feed_Pretrat":       { l:"UF entrada", tot:true },
+  "UF_Salida":          { l:"UF salida",  tot:true },
   "Rechazo_Azud":       "Retrolavado F. Azud",
   "Rechazo_AGPlus":     "Retroavado F. AG PLUS",
   "Rechazo_Multimedia": "Retrolavado FFMM",
@@ -281,39 +266,30 @@ const STREAM_METRO = {
   "WUR2_Entrada":       ["WUR 2 Entrada (T810)","WUR 2 Entrada (Nanos)"],
   "WUR2_Permeado":      "WUR 2 Permeado",
   "WUR2_Rechazo":       "WUR 2 Rechazo",
+  "Drenaje_NanoWUR":    "DIF RECHAZO - WUR",
   "Desaireadores":      "Desaireadores",
-  "PTR_LB03":           "Envio PTR a LB03",
+  "PTR_LB03":           { l:"Envio PTR a LB03", tot:true },
   "LB03_Total":         "Agua servicio",
-  "Agua_Producto":      ["TK-7200","TK-200"],
+  "LB02_Total":         "Total LB02",
+  "RO_TK200":           ["Permeado RO Grande","Permeado RO Pequeña"],
+  "Agua_Producto":      "M³ Bebida",
 };
 
-// corrientes inferidas (sin medidor propio)
-const INFERRED = new Set(["UF_Rechazo","Permeado_Nano","Drenaje_NanoWUR"]);
+const INFERRED = new Set(["UF_Rechazo","Permeado_Nano"]); // muestran tag "calc"
 
 const STREAM_NAMES = {
-  "Pozos":"Pozos (5+6+7)",
-  "Agua_Potable":"Agua Potable",
-  "Feed_Pretrat":"Feed UF (UF entrada)",
-  "UF_Salida":"UF salida",
-  "UF_Permeado":"UF permeado",
-  "UF_Rechazo":"UF rechazo → drenaje",
-  "Rechazo_Azud":"Rechazo Azud",
-  "Rechazo_AGPlus":"Rechazo AG+",
+  "Pozos":"Pozos (5+6+7)", "Agua_Potable":"Agua Potable",
+  "Feed_Pretrat":"Feed UF (UF entrada)", "UF_Salida":"UF salida",
+  "UF_Permeado":"UF permeado", "UF_Rechazo":"UF rechazo → drenaje",
+  "Rechazo_Azud":"Rechazo Azud", "Rechazo_AGPlus":"Rechazo AG+",
   "Rechazo_Multimedia":"Rechazo Multimedia",
-  "Feed_Nano":"Feed Nano",
-  "Rechazo_Nano":"Rechazo Nano",
-  "Permeado_Nano":"Permeado Nano",
-  "WUR1_Entrada":"WUR1 Entrada",
-  "WUR1_Permeado":"WUR1 Permeado",
-  "WUR1_Rechazo":"WUR1 Rechazo",
-  "WUR2_Entrada":"WUR2 Entrada",
-  "WUR2_Permeado":"WUR2 Permeado",
-  "WUR2_Rechazo":"WUR2 Rechazo",
-  "Desaireadores":"Desaireadores",
-  "PTR_LB03":"Envío PTR → LB-03",
-  "LB03_Total":"Agua servicio (LB-03)",
-  "Agua_Producto":"Agua Producto",
-  "Drenaje_NanoWUR":"Drenaje rechazo NF (no recup.)",
+  "Feed_Nano":"Feed Nano", "Rechazo_Nano":"Rechazo Nano", "Permeado_Nano":"Permeado Nano",
+  "WUR1_Entrada":"WUR1 Entrada", "WUR1_Permeado":"WUR1 Permeado", "WUR1_Rechazo":"WUR1 Rechazo",
+  "WUR2_Entrada":"WUR2 Entrada", "WUR2_Permeado":"WUR2 Permeado", "WUR2_Rechazo":"WUR2 Rechazo",
+  "Drenaje_NanoWUR":"Drenaje rechazo NF (DIF)",
+  "Desaireadores":"Desaireadores → TK-7200", "RO_TK200":"RO → TK-200",
+  "PTR_LB03":"Envío PTR → LB-03", "LB03_Total":"Agua servicio (LB-03)",
+  "LB02_Total":"Total LB-02", "Agua_Producto":"Agua Producto (M³ Bebida)",
 };
 
 const EQUIPOS_RECUP = [
@@ -324,13 +300,13 @@ const EQUIPOS_RECUP = [
 ];
 
 const TANKS = [
-  { id:"TK300",  nombre:"TK-300 (captación)",      area:200 },
-  { id:"LB04",   nombre:"LB-04 (UF)",              area:50  },
-  { id:"LB05",   nombre:"LB-05 (multimedia)",      area:50  },
-  { id:"LB02",   nombre:"LB-02 (abatidores)",      area:40  },
-  { id:"LB03",   nombre:"LB-03 (WUR / PTR / serv.)",area:30  },
-  { id:"TK7200", nombre:"TK-7200 (desaireadores)", area:100 },
-  { id:"TK200",  nombre:"TK-200 (producto)",       area:300 },
+  { id:"TK300",  nombre:"TK-300 (captación)" },
+  { id:"LB04",   nombre:"LB-04 (UF)" },
+  { id:"LB05",   nombre:"LB-05 (multimedia)" },
+  { id:"LB02",   nombre:"LB-02 (abatidores)" },
+  { id:"LB03",   nombre:"LB-03 (PTR / servicio)" },
+  { id:"TK7200", nombre:"TK-7200 (desaireadores)" },
+  { id:"TK200",  nombre:"TK-200 (producto)" },
 ];
 
 // ═════════════════════════ HELPERS ═════════════════════════
@@ -339,69 +315,95 @@ function fmt(v,d=0){ return v==null?"—":v.toLocaleString("es-CL",{maximumFract
 function fmtPct(v){ return v==null?"—":v.toFixed(1)+" %"; }
 function dnum(d){ return d instanceof Date ? d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate() : null; }
 
-function sumLabel(label){
-  if(label==null) return null;
-  const labels = Array.isArray(label) ? label : [label];
-  let total=0, found=false;
-  const s=dnum(S.rangeDates.start), e=dnum(S.rangeDates.end);
-  for(const lab of labels){
-    const hit = S.labelIndex[norm(lab)];
-    if(!hit) continue;
-    const sh = S.sheets[hit.sheet];
-    if(!sh || !sh.dateCols.length) continue;
-    found = true;
-    for(const dc of sh.dateCols){
-      const dn = dnum(dc.date);
-      if(dn!=null && s!=null && e!=null && (dn<s || dn>e)) continue;
-      const v = (sh.grid[hit.row]||[])[dc.col];
-      if(typeof v==="number" && isFinite(v) && v>=0) total+=v;
-    }
-  }
-  return found ? total : null;
+function metaOf(sid){
+  const e = STREAM_METRO[sid];
+  if(e==null) return null;
+  if(typeof e==="object" && !Array.isArray(e) && ("l" in e)) return { labels:[].concat(e.l), tot:!!e.tot };
+  return { labels: Array.isArray(e)?e:[e], tot:false };
 }
 
 // ═════════════════════════ EXCEL ═════════════════════════
-function detectDates(ws, grid){
-  let best=-1, bestCount=0;
-  for(let r=0; r<Math.min(8, grid.length); r++){
+function isDateCell(ws,r,c,val){
+  const cell = ws[XLSX.utils.encode_cell({r,c})];
+  return (cell && cell.t==="d") || val instanceof Date;
+}
+function cellDate(ws,r,c,val){
+  const cell = ws[XLSX.utils.encode_cell({r,c})];
+  if(cell && cell.v instanceof Date) return cell.v;
+  if(val instanceof Date) return val;
+  return null;
+}
+function dlabel(d,fallback){ return d ? d.toLocaleDateString("es-CL",{day:"2-digit",month:"2-digit"}) : String(fallback); }
+
+function detectAxis(ws, grid){
+  const nRows = grid.length;
+  let maxCols = 0; for(const r of grid) if(r) maxCols = Math.max(maxCols, r.length);
+
+  // horizontal: fila con más fechas
+  let hRow=-1, hCnt=0;
+  for(let r=0; r<Math.min(10,nRows); r++){
     let cnt=0; const row=grid[r]||[];
+    for(let c=0; c<row.length; c++) if(isDateCell(ws,r,c,row[c])) cnt++;
+    if(cnt>hCnt){ hCnt=cnt; hRow=r; }
+  }
+  // vertical: columna con más fechas
+  let vCol=-1, vCnt=0;
+  for(let c=0; c<Math.min(10,maxCols); c++){
+    let cnt=0;
+    for(let r=0; r<nRows; r++) if(isDateCell(ws,r,c,(grid[r]||[])[c])) cnt++;
+    if(cnt>vCnt){ vCnt=cnt; vCol=c; }
+  }
+
+  if(hCnt>=vCnt && hCnt>=3){
+    const row=grid[hRow]||[], dateCols=[]; let started=false;
     for(let c=0; c<row.length; c++){
-      const cell = ws[XLSX.utils.encode_cell({r,c})];
-      if((cell && cell.t==='d') || row[c] instanceof Date) cnt++;
+      if(isDateCell(ws,hRow,c,row[c])){ started=true; const d=cellDate(ws,hRow,c,row[c]); dateCols.push({key:c,date:d,label:dlabel(d,c)}); }
+      else if(started) break;
     }
-    if(cnt>bestCount){ bestCount=cnt; best=r; }
+    return { axis:"h", dateCols, headerRow:hRow };
   }
-  if(best<0 || bestCount<3) return { dateRow:-1, dateCols:[] };
-  const row=grid[best]||[]; const dateCols=[]; let started=false;
-  for(let c=0; c<row.length; c++){
-    const cell = ws[XLSX.utils.encode_cell({r:best,c})];
-    const isDate = (cell && cell.t==='d') || row[c] instanceof Date;
-    if(isDate){
-      started=true;
-      const d = (cell && cell.v instanceof Date) ? cell.v : (row[c] instanceof Date ? row[c] : null);
-      const label = d ? d.toLocaleDateString("es-CL",{day:"2-digit",month:"2-digit"}) : String(c);
-      dateCols.push({ col:c, date:d, label });
-    } else if(started) break; // primer bloque contiguo
+  if(vCnt>=3){
+    const dateCols=[]; let started=false, firstRow=-1;
+    for(let r=0; r<nRows; r++){
+      const v=(grid[r]||[])[vCol];
+      if(isDateCell(ws,r,vCol,v)){ if(firstRow<0) firstRow=r; started=true; const d=cellDate(ws,r,vCol,v); dateCols.push({key:r,date:d,label:dlabel(d,r)}); }
+      else if(started) break;
+    }
+    // fila de encabezados = fila con más strings antes del primer dato
+    let hr=0, hsc=-1;
+    for(let r=0; r<Math.max(1,firstRow); r++){
+      let cnt=0; const row=grid[r]||[];
+      for(let c=0; c<row.length; c++) if(typeof row[c]==="string" && row[c].trim()) cnt++;
+      if(cnt>hsc){ hsc=cnt; hr=r; }
+    }
+    return { axis:"v", dateCols, headerRow:hr };
   }
-  return { dateRow:best, dateCols };
+  return { axis:null, dateCols:[], headerRow:-1 };
 }
 
 function buildLabelIndex(){
   S.labelIndex = {};
   for(const name of S.sheetOrder){
     const sh = S.sheets[name];
-    for(let r=0; r<sh.grid.length; r++){
-      const row = sh.grid[r]||[];
-      for(let c=0; c<Math.min(4, row.length); c++){
-        const v = row[c];
-        if(typeof v==="string" && v.trim()){
-          const key = norm(v);
-          if(key && !(key in S.labelIndex)) S.labelIndex[key] = { sheet:name, row:r, col:c };
+    if(sh.axis==="v"){
+      const row = sh.grid[sh.headerRow]||[];
+      for(let c=0; c<row.length; c++){
+        const v=row[c];
+        if(typeof v==="string" && v.trim()){ const k=norm(v); if(k && !(k in S.labelIndex)) S.labelIndex[k]={sheet:name,idx:c}; }
+      }
+    } else if(sh.axis==="h"){
+      for(let r=0; r<sh.grid.length; r++){
+        const row=sh.grid[r]||[]; const lim=Math.min(LABEL_COLS,row.length);
+        for(let c=0; c<lim; c++){
+          const v=row[c];
+          if(typeof v==="string" && v.trim()){ const k=norm(v); if(k && !(k in S.labelIndex)) S.labelIndex[k]={sheet:name,idx:r}; }
         }
       }
     }
   }
 }
+
+function getCell(sh, idx, dc){ return sh.axis==="h" ? (sh.grid[idx]||[])[dc.key] : (sh.grid[dc.key]||[])[idx]; }
 
 function onExcel(evt){
   const file = evt.target.files[0];
@@ -410,39 +412,40 @@ function onExcel(evt){
   reader.onload = e => {
     try {
       const wb = XLSX.read(e.target.result, { type:"array", cellDates:true });
-      S.sheets = {}; S.sheetOrder = []; S.primary = null;
+      S.sheets={}; S.sheetOrder=[]; S.primary=null;
 
-      // METROSCUB primero (preferida para el calendario)
       const order = wb.SheetNames.slice().sort((a,b)=>{
-        if(/metroscub/i.test(a)) return -1;
-        if(/metroscub/i.test(b)) return 1;
-        return 0;
+        const am=/metroscub/i.test(a), bm=/metroscub/i.test(b);
+        return am===bm?0:(am?-1:1);
       });
 
       for(const name of order){
         const ws = wb.Sheets[name];
         const grid = XLSX.utils.sheet_to_json(ws, { header:1, defval:null, raw:true });
-        const { dateRow, dateCols } = detectDates(ws, grid);
-        S.sheets[name] = { grid, dateRow, dateCols };
+        const meta = detectAxis(ws, grid);
+        S.sheets[name] = { grid, ...meta };
         S.sheetOrder.push(name);
-        if(!S.primary && dateCols.length>=3) S.primary = name;
       }
 
-      if(!S.primary){ alert("No se detectaron columnas de fecha en ninguna hoja."); return; }
+      // primaria: METROSCUB con fechas, si no la de más fechas
+      let bestN=-1;
+      for(const name of S.sheetOrder){
+        const sh=S.sheets[name]; if(!sh.dateCols.length) continue;
+        if(/metroscub/i.test(name)){ S.primary=name; break; }
+        if(sh.dateCols.length>bestN){ bestN=sh.dateCols.length; S.primary=name; }
+      }
+      if(!S.primary){ alert("No se detectaron columnas/filas de fecha en ninguna hoja."); return; }
+
       buildLabelIndex();
 
       const pc = S.sheets[S.primary].dateCols;
       S.range = { from:0, to: pc.length-1 };
-
-      const selFrom = document.getElementById("dateFrom");
-      const selTo   = document.getElementById("dateTo");
-      selFrom.innerHTML = selTo.innerHTML = "";
+      const selFrom=document.getElementById("dateFrom"), selTo=document.getElementById("dateTo");
+      selFrom.innerHTML=selTo.innerHTML="";
       pc.forEach((d,i)=>{ selFrom.add(new Option(d.label,i)); selTo.add(new Option(d.label,i)); });
       selTo.value = pc.length-1;
 
-      document.getElementById("wurDest").value = S.config.wurDest;
-      ["dateCard","cfgCard","flowsCard"].forEach(id=>document.getElementById(id).style.display="");
-
+      ["dateCard","flowsCard"].forEach(id=>document.getElementById(id).style.display="");
       applyRange();
       renderTanks();
     } catch(err){
@@ -453,66 +456,104 @@ function onExcel(evt){
   reader.readAsArrayBuffer(file);
 }
 
-// ═════════════════════════ RANGO / CONFIG ═════════════════════════
-function onRange(){
-  let f = parseInt(document.getElementById("dateFrom").value);
-  let t = parseInt(document.getElementById("dateTo").value);
-  if(t < f){ t = f; document.getElementById("dateTo").value = f; }
-  S.range = { from:f, to:t };
-  applyRange();
+// ═════════════════════════ LECTURA POR ETIQUETA ═════════════════════════
+function sumLabels(labels){
+  let total=0, found=false;
+  const s=dnum(S.rangeDates.start), e=dnum(S.rangeDates.end);
+  for(const lab of labels){
+    const hit=S.labelIndex[norm(lab)]; if(!hit) continue;
+    const sh=S.sheets[hit.sheet]; if(!sh.dateCols.length) continue;
+    found=true;
+    for(const dc of sh.dateCols){
+      const dn=dnum(dc.date); if(dn!=null && s!=null && e!=null && (dn<s||dn>e)) continue;
+      const v=getCell(sh,hit.idx,dc);
+      if(typeof v==="number" && isFinite(v) && v>=0) total+=v;
+    }
+  }
+  return found?total:null;
 }
-function onConfig(){
-  S.config.wurDest = document.getElementById("wurDest").value;
-  renderBalance(); renderDiag();
+
+function diffLabels(labels){  // totalizador: último − primero del rango
+  let result=null, found=false;
+  const s=dnum(S.rangeDates.start), e=dnum(S.rangeDates.end);
+  for(const lab of labels){
+    const hit=S.labelIndex[norm(lab)]; if(!hit) continue;
+    const sh=S.sheets[hit.sheet]; if(!sh.dateCols.length) continue;
+    found=true;
+    const pts=[];
+    for(const dc of sh.dateCols){
+      const dn=dnum(dc.date); if(dn==null) continue;
+      if(s!=null && e!=null && (dn<s||dn>e)) continue;
+      const v=getCell(sh,hit.idx,dc);
+      if(typeof v==="number" && isFinite(v) && v>=0) pts.push({dn,v});
+    }
+    if(pts.length){
+      pts.sort((a,b)=>a.dn-b.dn);
+      result=(result||0)+Math.max(0, pts[pts.length-1].v - pts[0].v);
+    }
+  }
+  return found?(result||0):null;
+}
+
+function readStream(sid){ const m=metaOf(sid); if(!m) return null; return m.tot?diffLabels(m.labels):sumLabels(m.labels); }
+
+// ═════════════════════════ RANGO ═════════════════════════
+function onRange(){
+  let f=parseInt(document.getElementById("dateFrom").value);
+  let t=parseInt(document.getElementById("dateTo").value);
+  if(t<f){ t=f; document.getElementById("dateTo").value=f; }
+  S.range={from:f,to:t};
+  applyRange();
 }
 
 function applyRange(){
   if(!S.primary) return;
-  const pc = S.sheets[S.primary].dateCols;
-  S.rangeDates = { start: pc[S.range.from]?.date, end: pc[S.range.to]?.date };
+  const pc=S.sheets[S.primary].dateCols;
+  S.rangeDates={ start:pc[S.range.from] && pc[S.range.from].date, end:pc[S.range.to] && pc[S.range.to].date };
 
-  const days = S.range.to - S.range.from + 1;
-  document.getElementById("dayCount").textContent = days + (days===1?" día":" días");
-  document.getElementById("rangeCap").textContent = pc[S.range.from].label + " → " + pc[S.range.to].label;
+  const days=S.range.to-S.range.from+1;
+  document.getElementById("dayCount").textContent=days+(days===1?" día":" días");
+  document.getElementById("rangeCap").textContent=pc[S.range.from].label+" → "+pc[S.range.to].label;
 
-  S.flows = {};
-  for(const [sid,lbl] of Object.entries(STREAM_METRO)) S.flows[sid] = sumLabel(lbl);
-  if(S.flows["Agua_Producto"]==null) S.flows["Agua_Producto"] = sumLabel("M³ Bebida");
-  S.crossBebida = sumLabel("M³ Bebida");
+  S.flows={};
+  for(const sid of Object.keys(STREAM_METRO)) S.flows[sid]=readStream(sid);
+  S.crossProd=sumLabels(["TK-7200","TK-200"]);  // validación cruzada del producto
 
   renderFlows(); renderBalance(); renderRecup(); renderLosses(); renderDiag();
 }
 
-// ═════════════════════════ INFERENCIA ═════════════════════════
+// ═════════════════════════ INFERENCIA / ACCESO ═════════════════════════
 function inferStream(sid){
-  if(S.flows[sid]!=null) return S.flows[sid];
-  if(sid==="UF_Permeado")   return S.flows["UF_Salida"];
-  if(sid==="UF_Rechazo"){    const a=S.flows["Feed_Pretrat"], b=S.flows["UF_Salida"]; if(a!=null&&b!=null) return Math.max(0,a-b); }
-  if(sid==="Permeado_Nano"){ const a=S.flows["Feed_Nano"], b=S.flows["Rechazo_Nano"]; if(a!=null&&b!=null) return a-b; }
-  if(sid==="Drenaje_NanoWUR"){ const a=S.flows["Rechazo_Nano"], b=S.flows["WUR1_Entrada"]; if(a!=null&&b!=null) return Math.max(0,a-b); }
+  if(sid==="UF_Permeado")  return val("UF_Salida");
+  if(sid==="UF_Rechazo"){    const a=val("Feed_Pretrat"), b=val("UF_Salida"); if(a!=null&&b!=null) return Math.max(0,a-b); }
+  if(sid==="Permeado_Nano"){ const a=val("Feed_Nano"),    b=val("Rechazo_Nano"); if(a!=null&&b!=null) return a-b; }
+  if(sid==="Drenaje_NanoWUR"){ const a=val("Rechazo_Nano"), b=val("WUR1_Entrada"); if(a!=null&&b!=null) return Math.max(0,a-b); }
   return null;
 }
+function val(sid){ const v=S.flows[sid]; return v!=null?v:inferStream(sid); }
 
 // ═════════════════════════ FLOWS TABLE ═════════════════════════
+function tagFor(sid){
+  let t="";
+  if(INFERRED.has(sid)) t+='<span class="calc-tag">calc</span>';
+  const m=metaOf(sid); if(m && m.tot) t+='<span class="tot-tag">tot</span>';
+  return t;
+}
+function labelStr(sid){
+  const m=metaOf(sid); if(!m) return "—";
+  return m.labels.join(" + ");
+}
 function renderFlows(){
-  const tb = document.getElementById("flowsTbody");
-  tb.innerHTML = "";
-  const order = [
-    "Pozos","Agua_Potable","Feed_Pretrat","UF_Salida","UF_Rechazo",
-    "Rechazo_Azud","Rechazo_AGPlus","Rechazo_Multimedia",
-    "Feed_Nano","Rechazo_Nano","Permeado_Nano",
-    "WUR1_Entrada","WUR1_Permeado","WUR1_Rechazo",
-    "WUR2_Entrada","WUR2_Permeado","WUR2_Rechazo",
-    "Drenaje_NanoWUR","Desaireadores","PTR_LB03","LB03_Total","Agua_Producto"
-  ];
+  const tb=document.getElementById("flowsTbody"); tb.innerHTML="";
+  const order=["Pozos","Agua_Potable","Feed_Pretrat","UF_Salida","UF_Rechazo",
+    "Rechazo_Azud","Rechazo_AGPlus","Rechazo_Multimedia","Feed_Nano","Rechazo_Nano","Permeado_Nano",
+    "WUR1_Entrada","WUR1_Permeado","WUR1_Rechazo","WUR2_Entrada","WUR2_Permeado","WUR2_Rechazo",
+    "Drenaje_NanoWUR","Desaireadores","RO_TK200","PTR_LB03","LB03_Total","LB02_Total","Agua_Producto"];
   order.forEach(sid=>{
-    const v = INFERRED.has(sid) ? inferStream(sid) : S.flows[sid];
-    const lbl = STREAM_METRO[sid];
-    let lblStr = Array.isArray(lbl) ? lbl.join(" + ") : (lbl||"—");
-    const tag = INFERRED.has(sid) ? '<span class="calc-tag">calc</span>' : "";
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${STREAM_NAMES[sid]||sid}${tag}</td>
-      <td style="color:var(--dim);font-size:11px">${lblStr}</td>
+    const v=val(sid);
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${STREAM_NAMES[sid]||sid}${tagFor(sid)}</td>
+      <td style="color:var(--dim);font-size:11px">${labelStr(sid)}</td>
       <td class="num">${fmt(v)}</td>`;
     tb.appendChild(tr);
   });
@@ -520,14 +561,13 @@ function renderFlows(){
 
 // ═════════════════════════ ESTANQUES ═════════════════════════
 function renderTanks(){
-  const tb = document.getElementById("tankTbody");
-  tb.innerHTML = "";
+  const tb=document.getElementById("tankTbody"); tb.innerHTML="";
   TANKS.forEach(t=>{
-    if(!S.tanks[t.id]) S.tanks[t.id] = { area:t.area, h0:0, h1:0 };
-    const tk = S.tanks[t.id];
-    tb.innerHTML += `<tr>
+    if(!S.tanks[t.id]) S.tanks[t.id]={area:null,h0:0,h1:0};
+    const tk=S.tanks[t.id];
+    tb.innerHTML+=`<tr>
       <td>${t.nombre}</td>
-      <td><input type="number" value="${tk.area}" style="width:70px" oninput="S.tanks['${t.id}'].area=+this.value;renderBalance()"></td>
+      <td><input type="number" placeholder="m²" value="${tk.area==null?"":tk.area}" style="width:80px" oninput="S.tanks['${t.id}'].area=this.value===''?null:+this.value;renderBalance()"></td>
       <td><input type="number" value="${tk.h0}" step="0.01" style="width:70px" oninput="S.tanks['${t.id}'].h0=+this.value;renderBalance()"></td>
       <td><input type="number" value="${tk.h1}" step="0.01" style="width:70px" oninput="S.tanks['${t.id}'].h1=+this.value;renderBalance()"></td>
       <td class="num" id="dv_${t.id}">—</td>
@@ -535,44 +575,39 @@ function renderTanks(){
   });
   renderBalance();
 }
-function getTankDV(tid){ const tk=S.tanks[tid]; return tk ? (tk.h1-tk.h0)*tk.area : 0; }
+function getTankDV(tid){ const tk=S.tanks[tid]; if(!tk||!tk.area) return 0; return (tk.h1-tk.h0)*tk.area; }
 
 // ═════════════════════════ BALANCE ═════════════════════════
 function nodeBalance(n){
-  let eSum=0, sSum=0, anyMissing=false;
-  const rows=[];
+  let eSum=0,sSum=0,anyMissing=false; const rows=[];
   const add=(sid,dir)=>{
-    const v=inferStream(sid);
+    const v=val(sid);
     if(v!=null){ if(dir>0)eSum+=v; else sSum+=v; } else anyMissing=true;
-    const tag = INFERRED.has(sid)?'<span class="calc-tag">calc</span>':"";
-    rows.push(`<div class="stream-line"><span class="sname">${dir>0?"↗":"↘"} ${STREAM_NAMES[sid]||sid}${tag}</span><span>${v!=null?fmt(v):"<span style='color:var(--amber)'>?</span>"}</span></div>`);
+    rows.push(`<div class="stream-line"><span class="sname">${dir>0?"↗":"↘"} ${STREAM_NAMES[sid]||sid}${tagFor(sid)}</span><span>${v!=null?fmt(v):"<span style='color:var(--amber)'>?</span>"}</span></div>`);
   };
   n.entradas.forEach(s=>add(s,1));
   n.salidas.forEach(s=>add(s,-1));
-  const dv = n.estanque ? getTankDV(n.estanque) : 0;
-  const err = eSum - sSum - dv;
-  const base = Math.max(eSum, sSum);
-  const pct = base>0 ? Math.abs(err)/base*100 : null;
+  const dv=n.estanque?getTankDV(n.estanque):0;
+  const err=eSum-sSum-dv;
+  const base=Math.max(eSum,sSum);
+  const pct=base>0?Math.abs(err)/base*100:null;
 
   let status;
   if(n.estructural) status="estructural";
   else if(n.noValidado) status="novalidado";
-  else if(anyMissing && base===0) status="sindatos";
+  else if(base===0) status="sindatos";
   else if(sSum>eSum && pct!=null && pct>TOL) status="medidor";
   else if(pct==null) status="sindatos";
   else if(pct<TOL) status="ok";
   else if(pct<15) status="warn";
   else status="bad";
 
-  return { eSum, sSum, dv, err, pct, rows, status };
+  return { eSum,sSum,dv,err,pct,rows,status };
 }
-
 function statusBadge(st){
-  const map={
-    ok:["b-ok","OK"], warn:["b-warn","REVISAR"], bad:["b-bad","DESVIADO"],
+  const map={ ok:["b-ok","OK"], warn:["b-warn","REVISAR"], bad:["b-bad","DESVIADO"],
     medidor:["b-warn","MEDIDOR ⚠"], novalidado:["b-info","NO VALIDADO"],
-    estructural:["b-info","ESTRUCTURAL"], sindatos:["b-info","SIN DATOS"]
-  };
+    estructural:["b-info","ESTRUCTURAL"], sindatos:["b-info","SIN DATOS"] };
   const [c,t]=map[st]||["b-info","—"];
   return `<span class="badge ${c}">${t}</span>`;
 }
@@ -580,25 +615,23 @@ function statusBadge(st){
 function renderBalance(){
   TANKS.forEach(t=>{
     const el=document.getElementById("dv_"+t.id);
-    if(el){ const dv=getTankDV(t.id); el.textContent=fmt(dv); el.className="num "+(dv>0?"warn":dv<0?"ok":""); }
+    if(el){ const dv=getTankDV(t.id); el.textContent=S.tanks[t.id]&&S.tanks[t.id].area?fmt(dv):"—"; el.className="num "+(dv>0?"warn":dv<0?"ok":""); }
   });
 
-  const f=S.flows;
-  const frescas = (f["Pozos"]||0)+(f["Agua_Potable"]||0);
-  const producto = f["Agua_Producto"];
-  const servicio = f["LB03_Total"];
-  const drenajes = ["Rechazo_Azud","Rechazo_AGPlus","Rechazo_Multimedia","WUR1_Rechazo","WUR2_Rechazo"]
-      .map(s=>f[s]||0).reduce((a,b)=>a+b,0)
-      + (inferStream("UF_Rechazo")||0) + (inferStream("Drenaje_NanoWUR")||0);
-  const acum = TANKS.map(t=>getTankDV(t.id)).reduce((a,b)=>a+b,0);
-  const salidas = (producto||0)+(servicio||0)+drenajes+acum;
-  const residuo = frescas - salidas;
-  const pct = frescas>0 ? Math.abs(residuo)/frescas*100 : null;
+  const frescas=(val("Pozos")||0)+(val("Agua_Potable")||0);
+  const producto=val("Agua_Producto");
+  const servicio=val("LB03_Total");
+  const drenajes=["Rechazo_Azud","Rechazo_AGPlus","Rechazo_Multimedia","WUR1_Rechazo","WUR2_Rechazo"]
+      .map(s=>val(s)||0).reduce((a,b)=>a+b,0) + (val("UF_Rechazo")||0) + (val("Drenaje_NanoWUR")||0);
+  const acum=TANKS.map(t=>getTankDV(t.id)).reduce((a,b)=>a+b,0);
+  const salidas=(producto||0)+(servicio||0)+drenajes+acum;
+  const residuo=frescas-salidas;
+  const pct=frescas>0?Math.abs(residuo)/frescas*100:null;
 
-  document.getElementById("balanceCards").innerHTML = `
+  document.getElementById("balanceCards").innerHTML=`
     <div class="bcard"><div class="label">Entradas frescas</div><div class="val" style="color:var(--green)">${fmt(frescas)}</div><div class="cap">Pozos + Potable · m³</div></div>
     <div class="bcard"><div class="label">Producto + Servicio</div><div class="val" style="color:var(--blue)">${fmt((producto||0)+(servicio||0))}</div><div class="cap">m³</div></div>
-    <div class="bcard"><div class="label">Drenajes</div><div class="val" style="color:var(--red)">${fmt(drenajes)}</div><div class="cap">m³</div></div>
+    <div class="bcard"><div class="label">Drenajes</div><div class="val" style="color:var(--red)">${fmt(drenajes)}</div><div class="cap">incl. UF rechazo · m³</div></div>
     <div class="bcard"><div class="label">ΔV estanques</div><div class="val" style="color:var(--amber)">${fmt(acum)}</div><div class="cap">m³</div></div>
     <div class="bcard"><div class="label">Residuo</div>
       <div class="val ${pct!=null&&pct<TOL?'ok':pct!=null&&pct<15?'warn':'bad'}">${fmt(residuo)}</div>
@@ -611,30 +644,30 @@ function renderBalance(){
     bd.innerHTML=`<div class="diag-item diag-${cls}"><span class="${cls}">● </span>${msg} (residuo ${fmt(residuo)} m³, ${fmtPct(pct)})</div>`;
   } else bd.innerHTML="";
 
-  // KPI recuperación
-  const recuperada = (f["WUR1_Permeado"]||0)+(f["WUR2_Permeado"]||0)+(f["PTR_LB03"]||0);
-  const pozos = f["Pozos"];
-  const efic = pozos>0 ? recuperada/pozos*100 : null;
-  const kcls = efic==null?"":efic>=75?"ok":efic>=60?"warn":"bad";
-  document.getElementById("kpiCards").innerHTML = `
-    <div class="bcard"><div class="label">Agua recuperada</div><div class="val" style="color:var(--indigo)">${fmt(recuperada)}</div><div class="cap">WUR1+WUR2+PTR · m³</div></div>
-    <div class="bcard"><div class="label">Pozos</div><div class="val">${fmt(pozos)}</div><div class="cap">m³</div></div>
-    <div class="bcard"><div class="label">Eficiencia recuperación</div><div class="val ${kcls}">${fmtPct(efic)}</div><div class="cap">meta 75 %</div></div>`;
+  // KPIs
+  const pozos=val("Pozos");
+  const interna=(val("WUR1_Permeado")||0)+(val("WUR2_Permeado")||0)+(val("PTR_LB03")||0);
+  const eInt=pozos>0?interna/pozos*100:null;
+  const planta=(val("LB02_Total")||0)+(val("LB03_Total")||0);
+  const ePla=pozos>0?planta/pozos*100:null;
+  const clsPla=ePla==null?"":ePla>=75?"ok":ePla>=60?"warn":"bad";
+  document.getElementById("kpiCards").innerHTML=`
+    <div class="bcard"><div class="label">Recuperación interna</div><div class="val info">${fmtPct(eInt)}</div><div class="cap">WUR1+WUR2+PTR ÷ Pozos</div></div>
+    <div class="bcard"><div class="label">Recuperación de planta</div><div class="val ${clsPla}">${fmtPct(ePla)}</div><div class="cap">(LB-02+LB-03) ÷ Pozos · meta 75 %</div></div>
+    <div class="bcard"><div class="label">Pozos</div><div class="val">${fmt(pozos)}</div><div class="cap">m³</div></div>`;
 
   // Nodos
   const ng=document.getElementById("nodeGrid"); ng.innerHTML="";
   getNodos().forEach(n=>{
     const b=nodeBalance(n);
-    const pctTxt = (b.status==="ok"||b.status==="warn"||b.status==="bad"||b.status==="medidor") && b.pct!=null
-      ? `Error nodo: ${fmt(b.err)} m³ (${fmtPct(b.pct)})` : "";
-    const footColor = b.status==="ok"?"var(--green)":b.status==="warn"?"var(--amber)":b.status==="bad"?"var(--red)":"var(--dim)";
-    const extra = b.status==="medidor"
-      ? `<div class="cap" style="color:var(--amber)">⚠️ Salidas &gt; entrada: medidor sospechoso, no es pérdida física.</div>` : "";
-    ng.innerHTML += `<div class="node-card">
+    const showErr=["ok","warn","bad","medidor"].includes(b.status) && b.pct!=null;
+    const footColor=b.status==="ok"?"var(--green)":b.status==="warn"||b.status==="medidor"?"var(--amber)":b.status==="bad"?"var(--red)":"var(--dim)";
+    const extra=b.status==="medidor"?`<div class="cap" style="color:var(--amber)">⚠️ Salidas &gt; entrada: medidor sospechoso, no es pérdida física.</div>`:"";
+    ng.innerHTML+=`<div class="node-card">
       <div class="node-title"><span>${n.nombre}</span>${statusBadge(b.status)}</div>
       ${b.rows.join("")||'<div class="cap">paso sin pérdida (sin medidor)</div>'}
       ${b.dv!==0?`<div class="stream-line"><span class="sname">⊿ Acumulación (${n.estanque})</span><span style="color:var(--amber)">${fmt(b.dv)}</span></div>`:""}
-      ${pctTxt?`<div style="border-top:1px solid var(--bord);margin-top:6px;padding-top:6px;font-size:11px;color:${footColor}">${pctTxt}</div>`:""}
+      ${showErr?`<div style="border-top:1px solid var(--bord);margin-top:6px;padding-top:6px;font-size:11px;color:${footColor}">Error nodo: ${fmt(b.err)} m³ (${fmtPct(b.pct)})</div>`:""}
       ${extra}
     </div>`;
   });
@@ -644,32 +677,23 @@ function renderBalance(){
 function renderRecup(){
   const el=document.getElementById("recupList");
   if(!S.primary){ el.innerHTML="<p style='color:var(--dim)'>Carga un archivo Excel para ver el ranking.</p>"; return; }
-
-  const results = EQUIPOS_RECUP.map(eq=>{
-    const perm=sumLabel(eq.perm);
-    const rech=eq.rech?sumLabel(eq.rech):null;
-    let efic=null, fueraServicio=false;
-    if(perm==null && rech==null) { /* sin datos */ }
-    else if((perm||0)===0 && (rech||0)===0) fueraServicio=true;
+  const results=EQUIPOS_RECUP.map(eq=>{
+    const perm=sumLabels([eq.perm]);
+    const rech=eq.rech?sumLabels([eq.rech]):null;
+    let efic=null, fuera=false;
+    if(perm==null && rech==null){}
+    else if((perm||0)===0 && (rech||0)===0) fuera=true;
     else { const tot=(perm||0)+(rech||0); efic=tot>0?(perm||0)/tot*100:null; }
-    return { eq, perm, rech, efic, fueraServicio };
+    return {eq,perm,rech,efic,fuera};
   });
-  results.sort((a,b)=>{
-    const ra=a.efic==null?Infinity:a.efic, rb=b.efic==null?Infinity:b.efic;
-    return ra-rb;
-  });
-
+  results.sort((a,b)=>(a.efic==null?Infinity:a.efic)-(b.efic==null?Infinity:b.efic));
   el.innerHTML="";
   results.forEach((r,i)=>{
-    const rank=i+1;
-    const rankColor=rank===1?"var(--red)":rank===2?"var(--amber)":"var(--green)";
-    const efic=r.efic;
-    const barColor=efic==null?"var(--dim)":efic<50?"var(--red)":efic<70?"var(--amber)":"var(--green)";
+    const rank=i+1, rankColor=rank===1?"var(--red)":rank===2?"var(--amber)":"var(--green)";
+    const efic=r.efic, barColor=efic==null?"var(--dim)":efic<50?"var(--red)":efic<70?"var(--amber)":"var(--green)";
     const barW=efic!=null?Math.min(100,efic).toFixed(1):0;
-    const eficTxt = r.fueraServicio ? '<span class="info">fuera de servicio</span>'
-                  : efic==null ? '<span class="info">sin datos</span>'
-                  : `<span style="color:${barColor}">${fmtPct(efic)}</span>`;
-    el.innerHTML += `<div style="margin-bottom:14px">
+    const eficTxt=r.fuera?'<span class="info">fuera de servicio</span>':efic==null?'<span class="info">sin datos</span>':`<span style="color:${barColor}">${fmtPct(efic)}</span>`;
+    el.innerHTML+=`<div style="margin-bottom:14px">
       <div style="display:flex;align-items:center;margin-bottom:4px">
         <div class="rank-badge" style="background:${rankColor};color:#0f172a;margin-right:8px">${rank}</div>
         <span style="font-weight:600;font-size:14px">${r.eq.nombre}</span>
@@ -690,13 +714,13 @@ function renderLosses(){
   const el=document.getElementById("lossList");
   if(!S.primary){ el.innerHTML="<p style='color:var(--dim)'>Carga un archivo Excel para ver pérdidas.</p>"; return; }
   const items=[
-    { nombre:"UF rechazo (drenaje)",  v:inferStream("UF_Rechazo") },
-    { nombre:"Rechazo Azud",          v:S.flows["Rechazo_Azud"] },
-    { nombre:"Rechazo AG+",           v:S.flows["Rechazo_AGPlus"] },
-    { nombre:"Rechazo Multimedia",    v:S.flows["Rechazo_Multimedia"] },
-    { nombre:"WUR1 Rechazo",          v:S.flows["WUR1_Rechazo"] },
-    { nombre:"WUR2 Rechazo",          v:S.flows["WUR2_Rechazo"] },
-    { nombre:"Drenaje rechazo NF",    v:inferStream("Drenaje_NanoWUR") },
+    {nombre:"UF rechazo (drenaje)", v:val("UF_Rechazo")},
+    {nombre:"Rechazo Azud",         v:val("Rechazo_Azud")},
+    {nombre:"Rechazo AG+",          v:val("Rechazo_AGPlus")},
+    {nombre:"Rechazo Multimedia",   v:val("Rechazo_Multimedia")},
+    {nombre:"WUR1 Rechazo",         v:val("WUR1_Rechazo")},
+    {nombre:"WUR2 Rechazo",         v:val("WUR2_Rechazo")},
+    {nombre:"Drenaje rechazo NF",   v:val("Drenaje_NanoWUR")},
   ];
   items.sort((a,b)=>(b.v||0)-(a.v||0));
   const maxV=Math.max(...items.map(l=>l.v||0),1);
@@ -718,44 +742,33 @@ function renderLosses(){
 function renderDiag(){
   const el=document.getElementById("diagList");
   if(!S.primary){ el.innerHTML="<p style='color:var(--dim)'>Carga un archivo Excel para ver el diagnóstico.</p>"; return; }
-  const items=[]; const f=S.flows;
+  const items=[];
 
-  // hojas leídas
-  items.push({cls:"info", msg:`Hojas leídas: ${S.sheetOrder.join(", ")} · calendario: ${S.primary}`});
+  items.push({cls:"info", msg:`Hojas: ${S.sheetOrder.map(n=>n+" ["+(S.sheets[n].axis||"?")+"]").join(", ")} · calendario: ${S.primary}`});
 
-  // medidores faltantes / en cero
-  for(const [sid,lbl] of Object.entries(STREAM_METRO)){
-    const v=f[sid];
-    const lblStr=Array.isArray(lbl)?lbl.join(", "):lbl;
-    if(v==null) items.push({cls:"warn", msg:`Sin datos: ${STREAM_NAMES[sid]||sid} — etiqueta "${lblStr}" no encontrada en el Excel.`});
+  // verificación totalizadores clave
+  items.push({cls:"info", msg:`Totalizadores → Feed UF: ${fmt(val("Feed_Pretrat"))} · UF salida: ${fmt(val("UF_Salida"))} · PTR→LB-03: ${fmt(val("PTR_LB03"))} m³`});
+
+  // medidores faltantes
+  for(const sid of Object.keys(STREAM_METRO)){
+    if(val(sid)==null) items.push({cls:"warn", msg:`Sin datos: ${STREAM_NAMES[sid]||sid} — etiqueta "${labelStr(sid)}" no encontrada.`});
   }
 
   // validación por nodo
   getNodos().forEach(n=>{
     const b=nodeBalance(n);
-    if(b.status==="medidor")
-      items.push({cls:"bad", msg:`${n.nombre}: salidas (${fmt(b.sSum)}) &gt; entrada (${fmt(b.eSum)}) → medidor sospechoso, NO pérdida física (${fmtPct(b.pct)}).`});
-    else if(b.status==="bad")
-      items.push({cls:"bad", msg:`${n.nombre}: desviación alta ${fmtPct(b.pct)} (${fmt(b.err)} m³).`});
-    else if(b.status==="warn")
-      items.push({cls:"warn", msg:`${n.nombre}: desviación ${fmtPct(b.pct)} — revisar.`});
-    else if(b.status==="novalidado")
-      items.push({cls:"info", msg:`${n.nombre}: permeado inferido (sin medidor independiente, Permeado RO=0) → no validado.`});
-    else if(b.status==="ok")
-      items.push({cls:"ok", msg:`${n.nombre}: cierre OK (${fmtPct(b.pct)}).`});
+    if(b.status==="medidor") items.push({cls:"bad", msg:`${n.nombre}: salidas (${fmt(b.sSum)}) &gt; entrada (${fmt(b.eSum)}) → medidor sospechoso, NO pérdida física (${fmtPct(b.pct)}).`});
+    else if(b.status==="bad") items.push({cls:"bad", msg:`${n.nombre}: desviación alta ${fmtPct(b.pct)} (${fmt(b.err)} m³).`});
+    else if(b.status==="warn") items.push({cls:"warn", msg:`${n.nombre}: desviación ${fmtPct(b.pct)} — revisar.`});
+    else if(b.status==="novalidado") items.push({cls:"info", msg:`${n.nombre}: permeado inferido (sin medidor independiente) → no validado.`});
+    else if(b.status==="ok") items.push({cls:"ok", msg:`${n.nombre}: cierre OK (${fmtPct(b.pct)}).`});
   });
 
-  // eficiencias WUR
-  [["WUR 1",f["WUR1_Permeado"],f["WUR1_Rechazo"]],["WUR 2",f["WUR2_Permeado"],f["WUR2_Rechazo"]]].forEach(([n,p,r])=>{
-    if(p!=null&&r!=null){ const tot=p+r,e=tot>0?p/tot*100:null;
-      if(e!=null&&e<50) items.push({cls:"warn", msg:`${n}: eficiencia baja (${fmtPct(e)}) — revisar membranas.`}); }
-  });
-
-  // validación cruzada producto vs M³ Bebida
-  const prod=f["Agua_Producto"], beb=S.crossBebida;
-  if(prod!=null && beb!=null && beb>0){
-    const d=Math.abs(prod-beb)/beb*100;
-    items.push({cls:d<10?"ok":"warn", msg:`Validación cruzada producto: TK-7200+TK-200=${fmt(prod)} vs M³ Bebida=${fmt(beb)} (Δ ${fmtPct(d)}).`});
+  // validación cruzada producto
+  const prod=val("Agua_Producto"), cross=S.crossProd;
+  if(prod!=null && cross!=null && cross>0){
+    const d=Math.abs(prod-cross)/cross*100;
+    items.push({cls:d<10?"ok":"warn", msg:`Validación cruzada producto: M³ Bebida=${fmt(prod)} vs TK-7200+TK-200=${fmt(cross)} (Δ ${fmtPct(d)}).`});
   }
 
   el.innerHTML=items.map(i=>`<div class="diag-item diag-${i.cls}"><span class="${i.cls}">● </span>${i.msg}</div>`).join("");
@@ -768,7 +781,7 @@ function showTab(name){
   document.querySelectorAll(".tab-content").forEach(c=>c.classList.toggle("active", c.id==="tab-"+name));
 }
 
-TANKS.forEach(t=>{ S.tanks[t.id]={area:t.area,h0:0,h1:0}; });
+TANKS.forEach(t=>{ S.tanks[t.id]={area:null,h0:0,h1:0}; });
 renderTanks();
 </script>
 </body>
