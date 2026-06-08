@@ -262,21 +262,21 @@ function getNodos(){
       salidas:["UF_Permeado","UF_Rechazo"],
       estanque:"LB04" },
 
-    { id:"Multimedia", nombre:"Filtros Multimedia",
+    { id:"Multimedia", nombre:"Filtros Multimedia (LB-02)",
       entradas:["UF_Permeado"],
-      salidas:["Feed_Nano","Rechazo_Multimedia","Desaireadores"],
+      salidas:["Feed_Nano_fresco","Rechazo_Multimedia","Desaireadores","CIP","Enjuague_Lineas","Otros_Servicios"],
       estanque:"LB05",
       noValidado:true,
-      noValidadoMsg:"Reparto LB-02 no definido — nano+desaireadores > multimedia (topología incompleta)" },
+      noValidadoMsg:"Feed fresco del nano inferido desde LB-02 (no medido); cierra por construcción" },
 
     { id:"Abatidores", nombre:"Abatidores As (LB-04 → LB-05)",
       entradas:[], salidas:[], estanque:"LB02", estructural:true },
 
     { id:"Nano", nombre:"Nanofiltración (NF)",
-      entradas:["Feed_Nano"],
+      entradas:["Feed_Nano_fresco","Recirc_Nano"],
       salidas:["Permeado_Nano","Rechazo_Nano"],
       noValidado:true,
-      noValidadoMsg:"Permeado inferido (sin medidor independiente)" },
+      noValidadoMsg:"Recirculación inferida (Total Nano − feed fresco); permeado/rechazo en base total" },
 
     { id:"WUR1", nombre:"WUR 1 (recupera rechazo NF)",
       entradas:["WUR1_Entrada"],
@@ -294,8 +294,10 @@ function getNodos(){
 
     { id:"Produccion", nombre:"Producción (TK-7200 + RO→TK-200)",
       entradas:["Permeado_Nano","Desaireadores","RO_TK200", ...(dest==="Produccion"?wurRet:[])],
-      salidas:["Agua_Producto"],
-      estanque:"TK7200" },
+      salidas:["Agua_Producto","CIP","Enjuague_Lineas","Otros_Servicios"],
+      estanque:"TK7200",
+      noValidado:true,
+      noValidadoMsg:"Feed fresco del nano no medido; consumos no-bebida sin entrada medida independiente" },
   ];
 }
 
@@ -318,6 +320,9 @@ const STREAM_METRO = {
   "WUR2_Rechazo":       "WUR 2 Rechazo",
   "Drenaje_NanoWUR":    "DIF RECHAZO - WUR",
   "Desaireadores":      "Desaireadores",
+  "CIP":                "CIP",
+  "Enjuague_Lineas":    "ENJUAGUE DE LINEAS",
+  "Otros_Servicios":    "Otros Servicios",
   "PTR_LB03":           "M3 enviados",
   "LB03_Total":         "Agua servicio",
   "LB02_Total":         "Total LB02",
@@ -325,7 +330,7 @@ const STREAM_METRO = {
   "Agua_Producto":      "M³ Bebida",
 };
 
-const INFERRED = new Set(["UF_Rechazo","Permeado_Nano"]); // muestran tag "calc"
+const INFERRED = new Set(["UF_Rechazo","Permeado_Nano","Feed_Nano_fresco","Recirc_Nano"]); // muestran tag "calc"
 
 const STREAM_NAMES = {
   "Pozos":"Pozos (5+6+7)", "Agua_Potable":"Agua Potable",
@@ -333,11 +338,12 @@ const STREAM_NAMES = {
   "UF_Permeado":"UF permeado", "UF_Rechazo":"UF rechazo → drenaje",
   "Rechazo_Azud":"Rechazo Azud", "Rechazo_AGPlus":"Rechazo AG+",
   "Rechazo_Multimedia":"Rechazo Multimedia",
-  "Feed_Nano":"Feed Nano", "Rechazo_Nano":"Rechazo Nano", "Permeado_Nano":"Permeado Nano",
+  "Feed_Nano":"Feed Nano (total, medido)", "Feed_Nano_fresco":"Feed fresco nano (desde LB-02)", "Recirc_Nano":"Recirculación nano",
+  "Rechazo_Nano":"Rechazo Nano", "Permeado_Nano":"Permeado Nano",
   "WUR1_Entrada":"WUR1 Entrada", "WUR1_Permeado":"WUR1 Permeado", "WUR1_Rechazo":"WUR1 Rechazo",
   "WUR2_Entrada":"WUR2 Entrada", "WUR2_Permeado":"WUR2 Permeado", "WUR2_Rechazo":"WUR2 Rechazo",
   "Drenaje_NanoWUR":"Drenaje rechazo NF (DIF)",
-  "Desaireadores":"Desaireadores → TK-7200", "RO_TK200":"RO → TK-200",
+  "Desaireadores":"Desaireadores → TK-7200", "CIP":"CIP (limpieza)", "Enjuague_Lineas":"Enjuague de líneas", "Otros_Servicios":"Otros servicios", "RO_TK200":"RO → TK-200",
   "PTR_LB03":"Envío PTR → LB-03", "LB03_Total":"Agua servicio (LB-03)",
   "LB02_Total":"Total LB-02", "Agua_Producto":"Agua Producto (M³ Bebida)",
 };
@@ -620,6 +626,17 @@ function inferStream(sid){
   if(sid==="UF_Permeado")  return val("UF_Salida");
   if(sid==="UF_Rechazo"){    const a=val("Feed_Pretrat"), b=val("UF_Salida"); if(a!=null&&b!=null) return Math.max(0,a-b); }
   if(sid==="Permeado_Nano"){ const a=val("Feed_Nano"),    b=val("Rechazo_Nano"); if(a!=null&&b!=null) return a-b; }
+  if(sid==="Feed_Nano_fresco"){
+    // Lo que sale de LB-02 hacia el nano = disponible LB-02 − otros consumos de LB-02.
+    // disponible = UF salida − rechazo multimedia (FFMM). El resto del feed total del nano es recirculación.
+    const uf=val("UF_Salida");
+    if(uf!=null){
+      const lb02disp = uf - (val("Rechazo_Multimedia")||0);
+      const consumos = (val("Desaireadores")||0)+(val("CIP")||0)+(val("Enjuague_Lineas")||0)+(val("Otros_Servicios")||0);
+      return Math.max(0, lb02disp - consumos);
+    }
+  }
+  if(sid==="Recirc_Nano"){ const t=val("Feed_Nano"), f=val("Feed_Nano_fresco"); if(t!=null&&f!=null) return Math.max(0,t-f); }
   if(sid==="Drenaje_NanoWUR"){ const a=val("Rechazo_Nano"), b=val("WUR1_Entrada"); if(a!=null&&b!=null) return Math.max(0,a-b); }
   return null;
 }
@@ -639,9 +656,9 @@ function labelStr(sid){
 function renderFlows(){
   const tb=document.getElementById("flowsTbody"); tb.innerHTML="";
   const order=["Pozos","Agua_Potable","Feed_Pretrat","UF_Salida","UF_Rechazo",
-    "Rechazo_Azud","Rechazo_AGPlus","Rechazo_Multimedia","Feed_Nano","Rechazo_Nano","Permeado_Nano",
+    "Rechazo_Azud","Rechazo_AGPlus","Rechazo_Multimedia","Feed_Nano","Feed_Nano_fresco","Recirc_Nano","Rechazo_Nano","Permeado_Nano",
     "WUR1_Entrada","WUR1_Permeado","WUR1_Rechazo","WUR2_Entrada","WUR2_Permeado","WUR2_Rechazo",
-    "Drenaje_NanoWUR","Desaireadores","RO_TK200","PTR_LB03","LB03_Total","LB02_Total","Agua_Producto"];
+    "Drenaje_NanoWUR","Desaireadores","CIP","Enjuague_Lineas","Otros_Servicios","RO_TK200","PTR_LB03","LB03_Total","LB02_Total","Agua_Producto"];
   order.forEach(sid=>{
     const v=val(sid);
     const tr=document.createElement("tr");
@@ -724,7 +741,7 @@ function renderBalance(){
   document.getElementById("balanceCards").innerHTML=`
     <div class="bcard"><div class="label">Entradas frescas</div><div class="val" style="color:var(--green)">${fmt(frescas)}</div><div class="cap">Pozos + Potable · m³</div></div>
     <div class="bcard"><div class="label">Producto + Servicio</div><div class="val" style="color:var(--blue)">${fmt((producto||0)+(servicio||0))}</div><div class="cap">m³</div></div>
-    <div class="bcard"><div class="label">Drenajes</div><div class="val" style="color:var(--red)">${fmt(drenajes)}</div><div class="cap">incl. UF rechazo · m³</div></div>
+    <div class="bcard"><div class="label">Drenajes</div><div class="val" style="color:var(--red)">${fmt(drenajes)}</div><div class="cap">incl. UF rechazo · excl. CIP/enjuague (internos) · m³</div></div>
     <div class="bcard"><div class="label">ΔV estanques</div><div class="val" style="color:var(--amber)">${fmt(acum)}</div><div class="cap">m³</div></div>
     <div class="bcard"><div class="label">Residuo</div>
       <div class="val ${pct!=null&&pct<TOL?'ok':pct!=null&&pct<15?'warn':'bad'}">${fmt(residuo)}</div>
@@ -753,14 +770,16 @@ function renderBalance(){
   const ng=document.getElementById("nodeGrid"); ng.innerHTML="";
   getNodos().forEach(n=>{
     const b=nodeBalance(n);
-    const showErr=["ok","warn","bad","medidor"].includes(b.status) && b.pct!=null;
-    const footColor=b.status==="ok"?"var(--green)":b.status==="warn"||b.status==="medidor"?"var(--amber)":b.status==="bad"?"var(--red)":"var(--dim)";
-    const extra=b.status==="medidor"?`<div class="cap" style="color:var(--amber)">⚠️ Salidas &gt; entrada: medidor sospechoso, no es pérdida física.</div>`:"";
+    const showErr=["ok","warn","bad","medidor","novalidado"].includes(b.status) && b.pct!=null;
+    const footColor=b.status==="ok"?"var(--green)":(b.status==="warn"||b.status==="medidor")?"var(--amber)":b.status==="bad"?"var(--red)":"var(--indigo)";
+    const errLabel=b.status==="novalidado"?"Cierre (no validado)":"Error nodo";
+    const extra=b.status==="medidor"?`<div class="cap" style="color:var(--amber)">⚠️ Salidas &gt; entrada: medidor sospechoso, no es pérdida física.</div>`
+      :(b.status==="novalidado"&&n.noValidadoMsg)?`<div class="cap" style="color:var(--indigo)">ℹ️ ${n.noValidadoMsg}</div>`:"";
     ng.innerHTML+=`<div class="node-card">
       <div class="node-title"><span>${n.nombre}</span>${statusBadge(b.status)}</div>
       ${b.rows.join("")||'<div class="cap">paso sin pérdida (sin medidor)</div>'}
       ${b.dv!==0?`<div class="stream-line"><span class="sname">⊿ Acumulación (${n.estanque})</span><span style="color:var(--amber)">${fmt(b.dv)}</span></div>`:""}
-      ${showErr?`<div style="border-top:1px solid var(--bord);margin-top:6px;padding-top:6px;font-size:11px;color:${footColor}">Error nodo: ${fmt(b.err)} m³ (${fmtPct(b.pct)})</div>`:""}
+      ${showErr?`<div style="border-top:1px solid var(--bord);margin-top:6px;padding-top:6px;font-size:11px;color:${footColor}">${errLabel}: ${fmt(b.err)} m³ (${fmtPct(b.pct)})</div>`:""}
       ${extra}
     </div>`;
   });
@@ -844,6 +863,7 @@ function renderDiag(){
 
   // verificación lecturas clave
   items.push({cls:"info", msg:`Lecturas clave → Feed UF: ${fmt(val("Feed_Pretrat"))} · UF salida: ${fmt(val("UF_Salida"))} · PTR→LB-03: ${fmt(val("PTR_LB03"))} m³`});
+  items.push({cls:"info", msg:`LB-02 → feed fresco nano: ${fmt(val("Feed_Nano_fresco"))} (Total Nano ${fmt(val("Feed_Nano"))} − recirc ${fmt(val("Recirc_Nano"))}) · CIP ${fmt(val("CIP"))} · enjuague ${fmt(val("Enjuague_Lineas"))} · otros ${fmt(val("Otros_Servicios"))} m³`});
 
   // medidores faltantes
   for(const sid of Object.keys(STREAM_METRO)){
@@ -856,7 +876,7 @@ function renderDiag(){
     if(b.status==="medidor") items.push({cls:"bad", msg:`${n.nombre}: salidas (${fmt(b.sSum)}) &gt; entrada (${fmt(b.eSum)}) → medidor sospechoso, NO pérdida física (${fmtPct(b.pct)}).`});
     else if(b.status==="bad") items.push({cls:"bad", msg:`${n.nombre}: desviación alta ${fmtPct(b.pct)} (${fmt(b.err)} m³).`});
     else if(b.status==="warn") items.push({cls:"warn", msg:`${n.nombre}: desviación ${fmtPct(b.pct)} — revisar.`});
-    else if(b.status==="novalidado") items.push({cls:"info", msg:`${n.nombre}: ${n.noValidadoMsg||"topología no validada"} → NO VALIDADO.`});
+    else if(b.status==="novalidado") items.push({cls:"info", msg:`${n.nombre}: ${n.noValidadoMsg||"topología no validada"} → NO VALIDADO (cierre ${b.pct!=null?fmtPct(b.pct):"—"}).`});
     else if(b.status==="ok") items.push({cls:"ok", msg:`${n.nombre}: cierre OK (${fmtPct(b.pct)}).`});
   });
 
