@@ -68,7 +68,7 @@ tr:last-child td{border-bottom:none}
 
 .date-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
 .date-row label{font-size:12px;color:var(--dim)}
-select,input[type=number]{background:var(--bg);color:var(--txt);border:1px solid var(--bord);border-radius:6px;padding:5px 10px;font-size:13px;cursor:pointer}
+select,input[type=number],input[type=text]{background:var(--bg);color:var(--txt);border:1px solid var(--bord);border-radius:6px;padding:5px 10px;font-size:13px}
 .day-badge{background:var(--blue);color:#0f172a;border-radius:12px;padding:2px 10px;font-size:12px;font-weight:700}
 
 .cap{font-size:11px;color:var(--dim);margin-top:4px}
@@ -117,6 +117,38 @@ select,input[type=number]{background:var(--bg);color:var(--txt);border:1px solid
     </div>
     <p id="rangeCap" class="cap"></p>
     <p class="cap" style="color:var(--amber);margin-top:4px">⚠️ Valores negativos se ignoran al sumar. <span class="tot-tag">tot</span> = totalizador: valor = último − primero del rango (usa ≥2 días).</p>
+  </div>
+
+  <div class="card" id="cfgCard" style="display:none">
+    <div class="card-title">⚙️ Configuración del modelo — lo eliges tú</div>
+    <p class="cap" style="margin-bottom:10px">Estos puntos NO están fijados en el código. Los valores iniciales vienen de tu especificación; cámbialos según tu planta.</p>
+    <div class="date-row">
+      <label>Destino permeado WUR</label>
+      <select id="cfgWurDest" onchange="onConfig()">
+        <option value="TK300">TK-300 (retorno captación)</option>
+        <option value="LB03">LB-03 (servicio)</option>
+        <option value="Produccion">Producción</option>
+      </select>
+      <label>Estanque WUR1</label>
+      <select id="cfgWur1Tank" onchange="onConfig()">
+        <option value="none">Sin estanque</option>
+        <option value="TK300">TK-300</option>
+        <option value="LB03">LB-03</option>
+      </select>
+    </div>
+    <div class="date-row">
+      <label>Medidor salida Producción</label>
+      <select id="cfgProdMeter" onchange="onConfig()">
+        <option value="M³ Bebida">M³ Bebida</option>
+        <option value="Total LB02">Total LB02</option>
+      </select>
+    </div>
+    <div class="date-row">
+      <label>Etiqueta total LB-02 (KPI)</label>
+      <input type="text" id="cfgLb02" oninput="onConfig()" style="width:150px">
+      <label>Etiqueta total LB-03 (KPI)</label>
+      <input type="text" id="cfgLb03" oninput="onConfig()" style="width:150px">
+    </div>
   </div>
 
   <div class="card" id="flowsCard" style="display:none">
@@ -196,18 +228,31 @@ const S = {
   rangeDates: { start:null, end:null },
   flows: {},
   crossProd: null,
-  tanks: {}
+  tanks: {},
+  // Configuración elegible por el usuario (no son decisiones del código).
+  // Valores iniciales tomados de la especificación; editables en la pestaña Datos.
+  config: {
+    wurDest:   "TK300",       // destino permeado WUR: TK300 | LB03 | Produccion
+    wur1Tank:  "none",        // estanque de WUR1: none | TK300 | LB03
+    prodMeter: "M³ Bebida",   // medidor de salida de Producción
+    lb02Label: "Total LB02",  // etiqueta del total LB-02 para el KPI de planta
+    lb03Label: "Agua servicio"// etiqueta del total LB-03 para el KPI de planta
+  }
 };
 
 const TOL = 5;            // % tolerancia de cierre por nodo
 const LABEL_COLS = 12;    // columnas escaneadas para etiquetas (hojas horizontales)
 
 // ═════════════════════════ TOPOLOGÍA ═════════════════════════
-// Cadena en serie. WUR permeados recirculan a TK-300 (sin flag). LB-03 = PTR (in) + servicio (out).
+// Cadena en serie. El ruteo de los permeados WUR y el estanque de WUR1 los define
+// el usuario en la configuración (S.config), no el código.
 function getNodos(){
+  const wurRet = ["WUR1_Permeado","WUR2_Permeado"];
+  const dest = S.config.wurDest;
+  const wur1Tank = S.config.wur1Tank==="none" ? null : S.config.wur1Tank;
   return [
     { id:"Captacion", nombre:"Captación + Azud + AG+",
-      entradas:["Pozos","Agua_Potable","WUR1_Permeado","WUR2_Permeado"],
+      entradas:["Pozos","Agua_Potable", ...(dest==="TK300"?wurRet:[])],
       salidas:["Rechazo_Azud","Rechazo_AGPlus","Feed_Pretrat"],
       estanque:"TK300" },
 
@@ -231,19 +276,20 @@ function getNodos(){
 
     { id:"WUR1", nombre:"WUR 1 (recupera rechazo NF)",
       entradas:["WUR1_Entrada"],
-      salidas:["WUR1_Permeado","WUR1_Rechazo"] },
+      salidas:["WUR1_Permeado","WUR1_Rechazo"],
+      estanque:wur1Tank },
 
     { id:"WUR2", nombre:"WUR 2 (recupera CIP)",
       entradas:["WUR2_Entrada"],
       salidas:["WUR2_Permeado","WUR2_Rechazo"] },
 
     { id:"LB03", nombre:"LB-03 (PTR → servicio)",
-      entradas:["PTR_LB03"],
+      entradas:["PTR_LB03", ...(dest==="LB03"?wurRet:[])],
       salidas:["LB03_Total"],
       estanque:"LB03" },
 
     { id:"Produccion", nombre:"Producción (TK-7200 + RO→TK-200)",
-      entradas:["Desaireadores","RO_TK200"],
+      entradas:["Desaireadores","RO_TK200", ...(dest==="Produccion"?wurRet:[])],
       salidas:["Agua_Producto"],
       estanque:"TK7200" },
   ];
@@ -320,6 +366,15 @@ function metaOf(sid){
   if(e==null) return null;
   if(typeof e==="object" && !Array.isArray(e) && ("l" in e)) return { labels:[].concat(e.l), tot:!!e.tot };
   return { labels: Array.isArray(e)?e:[e], tot:false };
+}
+
+// Etiqueta efectiva: las corrientes configurables usan la elección del usuario (S.config),
+// el resto cae en STREAM_METRO. Así ninguna etiqueta queda decidida en el código.
+function getMeta(sid){
+  if(sid==="Agua_Producto") return { labels:[S.config.prodMeter], tot:false };
+  if(sid==="LB02_Total")    return { labels:[S.config.lb02Label], tot:false };
+  if(sid==="LB03_Total")    return { labels:[S.config.lb03Label], tot:false };
+  return metaOf(sid);
 }
 
 // ═════════════════════════ EXCEL ═════════════════════════
@@ -445,7 +500,14 @@ function onExcel(evt){
       pc.forEach((d,i)=>{ selFrom.add(new Option(d.label,i)); selTo.add(new Option(d.label,i)); });
       selTo.value = pc.length-1;
 
-      ["dateCard","flowsCard"].forEach(id=>document.getElementById(id).style.display="");
+      // sembrar controles de configuración con los valores actuales (editables por el usuario)
+      document.getElementById("cfgWurDest").value   = S.config.wurDest;
+      document.getElementById("cfgWur1Tank").value  = S.config.wur1Tank;
+      document.getElementById("cfgProdMeter").value = S.config.prodMeter;
+      document.getElementById("cfgLb02").value      = S.config.lb02Label;
+      document.getElementById("cfgLb03").value      = S.config.lb03Label;
+
+      ["dateCard","cfgCard","flowsCard"].forEach(id=>document.getElementById(id).style.display="");
       applyRange();
       renderTanks();
     } catch(err){
@@ -495,14 +557,22 @@ function diffLabels(labels){  // totalizador: último − primero del rango
   return found?(result||0):null;
 }
 
-function readStream(sid){ const m=metaOf(sid); if(!m) return null; return m.tot?diffLabels(m.labels):sumLabels(m.labels); }
+function readStream(sid){ const m=getMeta(sid); if(!m) return null; return m.tot?diffLabels(m.labels):sumLabels(m.labels); }
 
-// ═════════════════════════ RANGO ═════════════════════════
+// ═════════════════════════ RANGO / CONFIG ═════════════════════════
 function onRange(){
   let f=parseInt(document.getElementById("dateFrom").value);
   let t=parseInt(document.getElementById("dateTo").value);
   if(t<f){ t=f; document.getElementById("dateTo").value=f; }
   S.range={from:f,to:t};
+  applyRange();
+}
+function onConfig(){
+  S.config.wurDest   = document.getElementById("cfgWurDest").value;
+  S.config.wur1Tank  = document.getElementById("cfgWur1Tank").value;
+  S.config.prodMeter = document.getElementById("cfgProdMeter").value;
+  S.config.lb02Label = document.getElementById("cfgLb02").value;
+  S.config.lb03Label = document.getElementById("cfgLb03").value;
   applyRange();
 }
 
@@ -536,11 +606,11 @@ function val(sid){ const v=S.flows[sid]; return v!=null?v:inferStream(sid); }
 function tagFor(sid){
   let t="";
   if(INFERRED.has(sid)) t+='<span class="calc-tag">calc</span>';
-  const m=metaOf(sid); if(m && m.tot) t+='<span class="tot-tag">tot</span>';
+  const m=getMeta(sid); if(m && m.tot) t+='<span class="tot-tag">tot</span>';
   return t;
 }
 function labelStr(sid){
-  const m=metaOf(sid); if(!m) return "—";
+  const m=getMeta(sid); if(!m) return "—";
   return m.labels.join(" + ");
 }
 function renderFlows(){
