@@ -840,8 +840,15 @@ function renderLabelSources(){
   for(const k of [...usedModelLabels()].sort()){
     const alts=(S.labelAlts||{})[k]; if(!alts || !alts.length) continue;
     const occ=[S.labelIndex[k], ...alts].filter(Boolean);
-    S._srcOcc[k]=occ;
     const eff=labelHit(k);
+    // mostrar sólo si hay una elección real: una alternativa con datos en el
+    // rango, o una fuente ya elegida por el usuario (para poder revertirla);
+    // así los duplicados fantasma (relleno de combinadas, columnas vacías) no
+    // ensucian el selector
+    const hasOverride=!!((S.config.labelSources||{})[k]);
+    const otras=occ.filter(o=>!(eff && o.sheet===eff.sheet && o.idx===eff.idx));
+    if(!hasOverride && !otras.some(o=>(sumHit(o)||0)>0)) continue;
+    S._srcOcc[k]=occ;
     const opts=occ.map((o,i)=>{
       const sh=S.sheets[o.sheet];
       const pos=sh && sh.axis==="v" ? "col "+colName(o.idx) : "fila "+(o.idx+1);
