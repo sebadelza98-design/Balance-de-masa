@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Balance de Masa — Agua Industrial</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg:    #0f172a;
+  --card:  #1e293b;
+  --bord:  #334155;
+  --txt:   #e2e8f0;
+  --dim:   #94a3b8;
+  --blue:  #38bdf8;
+  --green: #4ade80;
+  --amber: #fbbf24;
+  --red:   #f87171;
+  --indigo:#818cf8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:system-ui,sans-serif;font-size:14px}
+h1{font-size:1.3rem;padding:16px 20px 0;color:var(--blue)}
+.subtitle{padding:2px 20px 12px;color:var(--dim);font-size:12px}
+
+.tabs{display:flex;gap:4px;padding:0 20px;border-bottom:1px solid var(--bord);margin-bottom:16px;flex-wrap:wrap}
+.tab{padding:8px 14px;cursor:pointer;border-radius:6px 6px 0 0;color:var(--dim);border:1px solid transparent;border-bottom:none;font-size:13px}
+.tab.active{background:var(--card);color:var(--txt);border-color:var(--bord)}
+.tab-content{display:none;padding:0 20px 40px}
+.tab-content.active{display:block}
+
+.card{background:var(--card);border:1px solid var(--bord);border-radius:10px;padding:16px;margin-bottom:14px}
+.card-title{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--blue);margin-bottom:10px;font-weight:600}
+
+.upload-zone{border:2px dashed var(--bord);border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:.2s}
+.upload-zone:hover{border-color:var(--blue);background:rgba(56,189,248,.06)}
+.upload-zone input{display:none}
+.upload-btn{display:inline-block;margin-top:10px;padding:8px 20px;background:var(--blue);color:#0f172a;border-radius:6px;font-weight:700;cursor:pointer}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:6px 10px;color:var(--dim);border-bottom:1px solid var(--bord);font-weight:500}
+td{padding:6px 10px;border-bottom:1px solid rgba(51,65,85,.5)}
+tr:last-child td{border-bottom:none}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.ok{color:var(--green)} .warn{color:var(--amber)} .bad{color:var(--red)} .info{color:var(--indigo)}
+.calc-tag{font-size:9px;background:rgba(129,140,248,.18);color:var(--indigo);padding:1px 5px;border-radius:4px;margin-left:5px}
+.tot-tag{font-size:9px;background:rgba(56,189,248,.18);color:var(--blue);padding:1px 5px;border-radius:4px;margin-left:5px}
+
+.balance-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px}
+.bcard{background:#0f172a;border-radius:8px;padding:12px;text-align:center}
+.bcard .label{font-size:11px;color:var(--dim);margin-bottom:4px}
+.bcard .val{font-size:1.25rem;font-weight:700}
+
+.rec-bar-bg{background:#0f172a;border-radius:4px;height:18px;position:relative;overflow:hidden}
+.rec-bar{height:100%;border-radius:4px;transition:width .4s}
+
+.node-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.node-card{background:#0f172a;border:1px solid var(--bord);border-radius:8px;padding:12px}
+.node-title{font-size:12px;font-weight:600;color:var(--indigo);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.stream-line{display:flex;justify-content:space-between;font-size:12px;padding:2px 0}
+.stream-line .sname{color:var(--dim)}
+
+.diag-item{padding:10px 12px;border-radius:8px;margin-bottom:8px;font-size:13px}
+.diag-ok{background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25)}
+.diag-warn{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25)}
+.diag-bad{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25)}
+.diag-info{background:rgba(129,140,248,.08);border:1px solid rgba(129,140,248,.25)}
+
+.date-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.date-row label{font-size:12px;color:var(--dim)}
+select,input[type=number],input[type=text]{background:var(--bg);color:var(--txt);border:1px solid var(--bord);border-radius:6px;padding:5px 10px;font-size:13px}
+.day-badge{background:var(--blue);color:#0f172a;border-radius:12px;padding:2px 10px;font-size:12px;font-weight:700}
+
+.cap{font-size:11px;color:var(--dim);margin-top:4px}
+
+.loss-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;margin-bottom:5px;background:#0f172a}
+.rank-badge{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+
+.badge{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap}
+.b-ok{background:rgba(74,222,128,.15);color:var(--green)}
+.b-warn{background:rgba(251,191,36,.15);color:var(--amber)}
+.b-bad{background:rgba(248,113,113,.15);color:var(--red)}
+.b-info{background:rgba(129,140,248,.15);color:var(--indigo)}
+</style>
+</head>
+<body>
+<h1>⚖️ Balance de Masa — Agua Industrial</h1>
+<p class="subtitle">Topología HMI: Pozos→TK-300→UF→LB-04→Abatidores→LB-05→F.Carbón→LB-02→{Nano→TK-200, Desaireadores→TK-7200}→Producción · PTR→LB-03 · WUR1/2→TK-300</p>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('datos')">📂 Datos</div>
+  <div class="tab" onclick="showTab('estanques')">🪣 Estanques</div>
+  <div class="tab" onclick="showTab('balance')">⚖️ Balance</div>
+  <div class="tab" onclick="showTab('recup')">♻️ Recuperación</div>
+  <div class="tab" onclick="showTab('nano')">📈 Nano día a día</div>
+  <div class="tab" onclick="showTab('perdidas')">💧 Pérdidas</div>
+  <div class="tab" onclick="showTab('diag')">🔍 Diagnóstico</div>
+</div>
+
+<!-- ═══════════════ TAB DATOS ═══════════════ -->
+<div id="tab-datos" class="tab-content active">
+  <div class="card upload-zone" onclick="document.getElementById('fileInput').click()">
+    <div style="font-size:2rem">📊</div>
+    <div style="margin-top:8px;font-size:15px;font-weight:600">Cargar archivo Excel</div>
+    <div style="margin-top:4px;font-size:12px;color:var(--dim)">Lee todas las hojas (orientación horizontal o vertical)</div>
+    <div class="upload-btn">Seleccionar archivo</div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="onExcel(event)">
+  </div>
+
+  <div class="card" id="dateCard" style="display:none">
+    <div class="card-title">📅 Rango de fechas</div>
+    <div class="date-row">
+      <label>Desde</label>
+      <select id="dateFrom" onchange="onRange()"></select>
+      <label>Hasta</label>
+      <select id="dateTo" onchange="onRange()"></select>
+      <span id="dayCount" class="day-badge">0 días</span>
+    </div>
+    <p id="rangeCap" class="cap"></p>
+    <p class="cap" style="color:var(--amber);margin-top:4px">⚠️ Valores negativos se ignoran al sumar. <span class="tot-tag">tot</span> = totalizador: valor = último − primero del rango (usa ≥2 días).</p>
+  </div>
+
+  <div class="card" id="cfgCard" style="display:none">
+    <div class="card-title">⚙️ Configuración del modelo — lo eliges tú</div>
+    <p class="cap" style="margin-bottom:10px">Estos puntos NO están fijados en el código. Los valores iniciales vienen de tu especificación; cámbialos según tu planta.</p>
+    <div class="date-row">
+      <label>Destino permeado WUR</label>
+      <select id="cfgWurDest" onchange="onConfig()">
+        <option value="TK300">TK-300 (retorno captación)</option>
+        <option value="LB03">LB-03 (servicio)</option>
+        <option value="Produccion">Producción</option>
+      </select>
+      <label>Estanque WUR1</label>
+      <select id="cfgWur1Tank" onchange="onConfig()">
+        <option value="none">Sin estanque</option>
+        <option value="TK300">TK-300</option>
+        <option value="LB03">LB-03</option>
+      </select>
+    </div>
+    <div class="date-row">
+      <label>Medidor salida Producción</label>
+      <select id="cfgProdMeter" onchange="onConfig()">
+        <option value="M³ Bebida">M³ Bebida</option>
+        <option value="Total LB02">Total LB02</option>
+      </select>
+      <label>Permeado RO Grande/Pequeña entra a Producción</label>
+      <select id="cfgRoProd" onchange="onConfig()">
+        <option value="si">Sí (línea RO aparte de la nano)</option>
+        <option value="no">No (es la misma agua del TK-200)</option>
+      </select>
+    </div>
+    <div class="date-row">
+      <label>Etiqueta total LB-02 (KPI)</label>
+      <input type="text" id="cfgLb02" oninput="onConfig()" style="width:150px">
+      <label>Etiqueta total LB-03 (KPI)</label>
+      <input type="text" id="cfgLb03" oninput="onConfig()" style="width:150px">
+    </div>
+  </div>
+
+  <div class="card" id="flowsCard" style="display:none">
+    <div class="card-title">Caudales leídos (m³ · período)</div>
+    <table>
+      <thead><tr><th>Corriente</th><th>Etiqueta / tipo</th><th class="num">m³</th></tr></thead>
+      <tbody id="flowsTbody"></tbody>
+    </table>
+    <p class="cap" style="margin-top:8px"><span class="calc-tag">calc</span> = inferida por cierre de nodo · <span class="tot-tag">tot</span> = totalizador (último − primero).</p>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB ESTANQUES ═══════════════ -->
+<div id="tab-estanques" class="tab-content">
+  <div class="card">
+    <div class="card-title">Acumulación en estanques · ΔV = ΔNivel × Área</div>
+    <p class="cap" style="margin-bottom:12px;color:var(--amber)">⚠️ Ingresa el área real (m²) y los niveles del período. Sin área, ΔV no se calcula (no hay valores precargados).</p>
+    <table>
+      <thead><tr><th>Estanque</th><th>Área (m²)</th><th>Nivel ini (m)</th><th>Nivel fin (m)</th><th class="num">ΔV (m³)</th></tr></thead>
+      <tbody id="tankTbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB BALANCE ═══════════════ -->
+<div id="tab-balance" class="tab-content">
+  <div class="card">
+    <div class="card-title">Conservación global · Frescas = Producto + Servicio + Drenajes + ΔV</div>
+    <div class="balance-row" id="balanceCards"></div>
+    <div id="balanceDiag"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">KPI de recuperación</div>
+    <div class="balance-row" id="kpiCards"></div>
+    <p class="cap">Recuperación interna = (WUR1 + WUR2 + PTR→LB-03) ÷ Pozos. Recuperación de planta = (LB-02 + LB-03) ÷ Pozos, meta 75 %.</p>
+  </div>
+  <div class="card">
+    <div class="card-title">Balance por nodo</div>
+    <div class="node-grid" id="nodeGrid"></div>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB RECUPERACIÓN ═══════════════ -->
+<div id="tab-recup" class="tab-content">
+  <div class="card">
+    <div class="card-title">Ranking equipos de recuperación · peor → mejor eficiencia</div>
+    <p class="cap" style="margin-bottom:12px">Eficiencia = Permeado ÷ (Permeado + Rechazo) × 100 %</p>
+    <div id="recupList"></div>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB NANO DÍA A DÍA ═══════════════ -->
+<div id="tab-nano" class="tab-content">
+  <div class="card">
+    <div class="card-title">Eficiencia de Nanofiltración día a día</div>
+    <p class="cap" style="margin-bottom:12px">Eficiencia diaria del permeado = (Total Nano − Rechazo nano) ÷ Total Nano × 100 %. Un punto por cada día del rango con Total Nano &gt; 0. Verde ≥ 85 % · ámbar 75–85 % · rojo &lt; 75 %.</p>
+    <div id="nanoStats" class="balance-row"></div>
+    <div id="nanoChart"><p style="color:var(--dim)">Carga un archivo Excel para ver la eficiencia diaria.</p></div>
+    <table style="margin-top:16px">
+      <thead><tr><th>Día</th><th class="num">Total Nano (m³)</th><th class="num">Rechazo (m³)</th><th class="num">Permeado (m³)</th><th class="num">Eficiencia</th></tr></thead>
+      <tbody id="nanoTbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB PÉRDIDAS ═══════════════ -->
+<div id="tab-perdidas" class="tab-content">
+  <div class="card">
+    <div class="card-title">Drenajes / pérdidas reales — mayor a menor</div>
+    <p class="cap" style="margin-bottom:12px">Sólo corrientes que abandonan la planta (no recirculadas).</p>
+    <div id="lossList"></div>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB DIAGNÓSTICO ═══════════════ -->
+<div id="tab-diag" class="tab-content">
+  <div class="card">
+    <div class="card-title">Validaciones físicas y de medición</div>
+    <div id="diagList"><p style="color:var(--dim)">Carga un archivo Excel para ver el diagnóstico.</p></div>
+  </div>
+</div>
+
+<script>
+// ═════════════════════════ STATE ═════════════════════════
+const S = {
+  sheets: {},        // name -> { grid, axis:'h'|'v', dateCols:[{date,label,key}], headerRow }
+  sheetOrder: [],
+  labelIndex: {},    // norm(label) -> {sheet, idx}
+  labelWarnings: [], // etiquetas duplicadas detectadas al indexar
+  primary: null,
+  range: { from:0, to:0 },
+  rangeDates: { start:null, end:null },
+  flows: {},
+  crossProd: null,
+  tanks: {},
+  // Configuración elegible por el usuario (no son decisiones del código).
+  // Valores iniciales tomados de la especificación; editables en la pestaña Datos.
+  config: {
+    wurDest:   "TK300",       // destino permeado WUR: TK300 | LB03 | Produccion
+    wur1Tank:  "none",        // estanque de WUR1: none | TK300 | LB03
+    prodMeter: "M³ Bebida",   // medidor de salida de Producción
+    roProd:    "si",          // Permeado RO Grande/Pequeña como entrada extra a Producción
+    lb02Label: "Total LB02",  // etiqueta del total LB-02 para el KPI de planta
+    lb03Label: "Agua servicio"// etiqueta del total LB-03 para el KPI de planta
+  }
+};
+
+const TOL = 5;            // % tolerancia de cierre por nodo
+const LABEL_COLS = 12;    // columnas escaneadas para etiquetas (hojas horizontales)
+
+// ═════════════════════════ TOPOLOGÍA ═════════════════════════
+// Cadena en serie. El ruteo de los permeados WUR y el estanque de WUR1 los define
+// el usuario en la configuración (S.config), no el código.
+function getNodos(){
+  const wurRet = ["WUR1_Permeado","WUR2_Permeado"];
+  const dest = S.config.wurDest;
+  const wur1Tank = S.config.wur1Tank==="none" ? null : S.config.wur1Tank;
+  return [
+    { id:"Captacion", nombre:"Captación + Azud + AG+",
+      entradas:["Pozos","Agua_Potable", ...(dest==="TK300"?wurRet:[])],
+      salidas:["Rechazo_Azud","Rechazo_AGPlus","Feed_Pretrat"],
+      estanque:"TK300" },
+
+    { id:"UF", nombre:"Ultrafiltración (UF)",
+      entradas:["Feed_Pretrat"],
+      salidas:["UF_Permeado","UF_Rechazo"],
+      estanque:"LB04" },
+
+    { id:"Abatidores", nombre:"Abatidores As: AS01–AS03 (LB-04 → LB-05)",
+      entradas:[], salidas:[], estructural:true },
+
+    { id:"Multimedia", nombre:"Filtros de carbón Et.1+2 (LB-05 → LB-02)",
+      entradas:["UF_Permeado"],
+      salidas:["FFMM_Tratada","Rechazo_Multimedia"],
+      estanque:"LB05",
+      noValidado:true,
+      noValidadoMsg:"Salida a LB-02 inferida (sin medidor) — cierre trivial, no validable" },
+
+    { id:"LB02", nombre:"LB-02 → Nano + Desaireadores",
+      entradas:["FFMM_Tratada"],
+      salidas:["Feed_Nano","Desaireadores"],
+      estanque:"LB02" },
+
+    { id:"Nano", nombre:"Nanofiltración MF01/MF02 (→ TK-200)",
+      entradas:["Feed_Nano"],
+      salidas:["Permeado_Nano","Rechazo_Nano"],
+      estanque:"TK200",
+      noValidado:true,
+      noValidadoMsg:"Permeado inferido (sin medidor independiente)" },
+
+    { id:"WUR1", nombre:"WUR 1 (recupera rechazo NF)",
+      entradas:["WUR1_Entrada"],
+      salidas:["WUR1_Permeado","WUR1_Rechazo"],
+      estanque:wur1Tank },
+
+    { id:"WUR2", nombre:"WUR 2 (recupera CIP)",
+      entradas:["WUR2_Entrada"],
+      salidas:["WUR2_Permeado","WUR2_Rechazo"] },
+
+    { id:"LB03", nombre:"LB-03 (PTR → servicio)",
+      entradas:["PTR_LB03", ...(dest==="LB03"?wurRet:[])],
+      salidas:["LB03_Total"],
+      estanque:"LB03" },
+
+    { id:"Produccion", nombre:"Producción (TK-7200 + TK-200)",
+      entradas:["Permeado_Nano","Desaireadores",
+                ...(S.config.roProd==="si"?["RO_TK200"]:[]),
+                ...(dest==="Produccion"?wurRet:[])],
+      salidas:["Agua_Producto"],
+      estanque:"TK7200" },
+  ];
+}
+
+// corriente -> etiqueta(s). Objeto {l,tot:true} = totalizador (último − primero).
+const STREAM_METRO = {
+  "Pozos":              "Consumo pozos",
+  "Agua_Potable":       "Agua Potable (25%)",
+  "Feed_Pretrat":       "Consumo Entrada",
+  "UF_Salida":          "Consumo salida",
+  "Rechazo_Azud":       "Retrolavado F. Azud",
+  "Rechazo_AGPlus":     "Retroavado F. AG PLUS",
+  "Rechazo_Multimedia": "Retrolavado FFMM",
+  "Feed_Nano":          "Total Nano",
+  "Rechazo_Nano":       "Rechazo nano",
+  "WUR1_Entrada":       "WUR 1 Entrada",
+  "WUR1_Permeado":      "WUR 1 Permeado",
+  "WUR1_Rechazo":       "WUR 1 Rechazo",
+  "WUR2_Entrada":       ["WUR 2 Entrada (T810)","WUR 2 Entrada (Nanos)"],
+  "WUR2_Permeado":      "WUR 2 Permeado",
+  "WUR2_Rechazo":       "WUR 2 Rechazo",
+  "Drenaje_NanoWUR":    "DIF RECHAZO - WUR",
+  "Desaireadores":      "Desaireadores",
+  "PTR_LB03":           "M3 enviados",
+  "LB03_Total":         "Agua servicio",
+  "LB02_Total":         "Total LB02",
+  "RO_TK200":           ["Permeado RO Grande","Permeado RO Pequeña"],
+  "Agua_Producto":      "M³ Bebida",
+};
+
+const INFERRED = new Set(["UF_Rechazo","Permeado_Nano","FFMM_Tratada"]); // muestran tag "calc"
+
+const STREAM_NAMES = {
+  "Pozos":"Pozos (5+6+7)", "Agua_Potable":"Agua Potable",
+  "Feed_Pretrat":"Feed UF (UF entrada)", "UF_Salida":"UF salida",
+  "UF_Permeado":"UF permeado", "UF_Rechazo":"UF rechazo → drenaje",
+  "FFMM_Tratada":"FFMM tratada → LB-02",
+  "Rechazo_Azud":"Rechazo Azud", "Rechazo_AGPlus":"Rechazo AG+",
+  "Rechazo_Multimedia":"Rechazo Multimedia",
+  "Feed_Nano":"Feed Nano", "Rechazo_Nano":"Rechazo Nano", "Permeado_Nano":"Permeado Nano",
+  "WUR1_Entrada":"WUR1 Entrada", "WUR1_Permeado":"WUR1 Permeado", "WUR1_Rechazo":"WUR1 Rechazo",
+  "WUR2_Entrada":"WUR2 Entrada", "WUR2_Permeado":"WUR2 Permeado", "WUR2_Rechazo":"WUR2 Rechazo",
+  "Drenaje_NanoWUR":"Drenaje rechazo NF (DIF)",
+  "Desaireadores":"Desaireadores → TK-7200", "RO_TK200":"RO → TK-200",
+  "PTR_LB03":"Envío PTR → LB-03", "LB03_Total":"Agua servicio (LB-03)",
+  "LB02_Total":"Total LB-02", "Agua_Producto":"Agua Producto (M³ Bebida)",
+};
+
+const EQUIPOS_RECUP = [
+  { id:"WUR1",   nombre:"WUR 1",      perm:"WUR 1 Permeado",     rech:"WUR 1 Rechazo" },
+  { id:"WUR2",   nombre:"WUR 2",      perm:"WUR 2 Permeado",     rech:"WUR 2 Rechazo" },
+  { id:"RO_GR",  nombre:"RO Grande",  perm:"Permeado RO Grande", rech:"Rechazo RO Grande (Rec LB03)" },
+  { id:"RO_PEQ", nombre:"RO Pequeña", perm:"Permeado RO Pequeña",rech:null },
+];
+
+const TANKS = [
+  { id:"TK300",  nombre:"TK-300 (captación)" },
+  { id:"LB04",   nombre:"LB-04 (UF)" },
+  { id:"LB05",   nombre:"LB-05 (multimedia)" },
+  { id:"LB02",   nombre:"LB-02 (abatidores)" },
+  { id:"LB03",   nombre:"LB-03 (PTR / servicio)" },
+  { id:"TK7200", nombre:"TK-7200 (desaireadores)" },
+  { id:"TK200",  nombre:"TK-200 (producto)" },
+];
+
+// ═════════════════════════ HELPERS ═════════════════════════
+function norm(s){ return String(s||"").trim().replace(/\s+/g," ").toLowerCase(); }
+function fmt(v,d=0){ return v==null?"—":v.toLocaleString("es-CL",{maximumFractionDigits:d}); }
+function fmtPct(v){ return v==null?"—":v.toFixed(1)+" %"; }
+function dnum(d){ return d instanceof Date ? d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate() : null; }
+
+function metaOf(sid){
+  const e = STREAM_METRO[sid];
+  if(e==null) return null;
+  if(typeof e==="object" && !Array.isArray(e) && ("l" in e)) return { labels:[].concat(e.l), tot:!!e.tot };
+  return { labels: Array.isArray(e)?e:[e], tot:false };
+}
+
+// Etiqueta efectiva: las corrientes configurables usan la elección del usuario (S.config),
+// el resto cae en STREAM_METRO. Así ninguna etiqueta queda decidida en el código.
+function getMeta(sid){
+  if(sid==="Agua_Producto") return { labels:[S.config.prodMeter], tot:false };
+  if(sid==="LB02_Total")    return { labels:[S.config.lb02Label], tot:false };
+  if(sid==="LB03_Total")    return { labels:[S.config.lb03Label], tot:false };
+  return metaOf(sid);
+}
+
+// ═════════════════════════ EXCEL ═════════════════════════
+function isDateCell(ws,r,c,val){
+  const cell = ws[XLSX.utils.encode_cell({r,c})];
+  return (cell && cell.t==="d") || val instanceof Date;
+}
+function cellDate(ws,r,c,val){
+  const cell = ws[XLSX.utils.encode_cell({r,c})];
+  if(cell && cell.v instanceof Date) return cell.v;
+  if(val instanceof Date) return val;
+  return null;
+}
+function dlabel(d,fallback){ return d ? d.toLocaleDateString("es-CL",{day:"2-digit",month:"2-digit"}) : String(fallback); }
+
+function detectAxis(ws, grid){
+  const nRows = grid.length;
+  let maxCols = 0; for(const r of grid) if(r) maxCols = Math.max(maxCols, r.length);
+
+  // horizontal: fila con más fechas
+  let hRow=-1, hCnt=0;
+  for(let r=0; r<Math.min(10,nRows); r++){
+    let cnt=0; const row=grid[r]||[];
+    for(let c=0; c<row.length; c++) if(isDateCell(ws,r,c,row[c])) cnt++;
+    if(cnt>hCnt){ hCnt=cnt; hRow=r; }
+  }
+  // vertical: columna con más fechas
+  let vCol=-1, vCnt=0;
+  for(let c=0; c<Math.min(10,maxCols); c++){
+    let cnt=0;
+    for(let r=0; r<nRows; r++) if(isDateCell(ws,r,c,(grid[r]||[])[c])) cnt++;
+    if(cnt>vCnt){ vCnt=cnt; vCol=c; }
+  }
+
+  if(hCnt>=vCnt && hCnt>=3){
+    const row=grid[hRow]||[], dateCols=[]; let started=false;
+    for(let c=0; c<row.length; c++){
+      if(isDateCell(ws,hRow,c,row[c])){ started=true; const d=cellDate(ws,hRow,c,row[c]); dateCols.push({key:c,date:d,label:dlabel(d,c)}); }
+      else if(started) break;
+    }
+    return { axis:"h", dateCols, headerRow:hRow };
+  }
+  if(vCnt>=3){
+    const dateCols=[]; let started=false, firstRow=-1;
+    for(let r=0; r<nRows; r++){
+      const v=(grid[r]||[])[vCol];
+      if(isDateCell(ws,r,vCol,v)){ if(firstRow<0) firstRow=r; started=true; const d=cellDate(ws,r,vCol,v); dateCols.push({key:r,date:d,label:dlabel(d,r)}); }
+      else if(started) break;
+    }
+    // fila de encabezados = fila con más strings antes del primer dato
+    let hr=0, hsc=-1;
+    for(let r=0; r<Math.max(1,firstRow); r++){
+      let cnt=0; const row=grid[r]||[];
+      for(let c=0; c<row.length; c++) if(typeof row[c]==="string" && row[c].trim()) cnt++;
+      if(cnt>hsc){ hsc=cnt; hr=r; }
+    }
+    return { axis:"v", dateCols, headerRow:hr };
+  }
+  return { axis:null, dateCols:[], headerRow:-1 };
+}
+
+function buildLabelIndex(){
+  S.labelIndex = {};
+  S.labelWarnings = [];
+  function addLabel(k, sheet, idx){
+    if(!k) return;
+    if(k in S.labelIndex){
+      const e = S.labelIndex[k];
+      if(e.sheet!==sheet || e.idx!==idx)
+        S.labelWarnings.push(`"${k}" ya indexada en hoja "${e.sheet}" idx ${e.idx}; ignorada en "${sheet}" idx ${idx}`);
+    } else {
+      S.labelIndex[k] = {sheet, idx};
+    }
+  }
+  for(const name of S.sheetOrder){
+    const sh = S.sheets[name];
+    if(sh.axis==="v"){
+      // Indexar TODAS las filas anteriores al primer dato; rellenar celdas combinadas
+      const firstData = sh.dateCols.length ? sh.dateCols[0].key : sh.grid.length;
+      for(let r=0; r<firstData; r++){
+        const row = sh.grid[r]||[];
+        let last = null;
+        for(let c=0; c<row.length; c++){
+          let v = row[c];
+          if(typeof v==="string" && v.trim()) last = v;
+          else if(v==null) v = last;   // relleno por combinación de celdas
+          else last = null;
+          if(v && typeof v==="string" && v.trim()) addLabel(norm(v), name, c);
+        }
+      }
+    } else if(sh.axis==="h"){
+      for(let r=0; r<sh.grid.length; r++){
+        const row=sh.grid[r]||[]; const lim=Math.min(LABEL_COLS,row.length);
+        for(let c=0; c<lim; c++){
+          const v=row[c];
+          if(typeof v==="string" && v.trim()) addLabel(norm(v), name, r);
+        }
+      }
+    }
+  }
+}
+
+function getCell(sh, idx, dc){ return sh.axis==="h" ? (sh.grid[idx]||[])[dc.key] : (sh.grid[dc.key]||[])[idx]; }
+
+function onExcel(evt){
+  const file = evt.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type:"array", cellDates:true });
+      S.sheets={}; S.sheetOrder=[]; S.primary=null;
+
+      const order = wb.SheetNames.slice().sort((a,b)=>{
+        const am=/metroscub/i.test(a), bm=/metroscub/i.test(b);
+        return am===bm?0:(am?-1:1);
+      });
+
+      for(const name of order){
+        const ws = wb.Sheets[name];
+        const grid = XLSX.utils.sheet_to_json(ws, { header:1, defval:null, raw:true });
+        const meta = detectAxis(ws, grid);
+        S.sheets[name] = { grid, ...meta };
+        S.sheetOrder.push(name);
+      }
+
+      // primaria: METROSCUB con fechas, si no la de más fechas
+      let bestN=-1;
+      for(const name of S.sheetOrder){
+        const sh=S.sheets[name]; if(!sh.dateCols.length) continue;
+        if(/metroscub/i.test(name)){ S.primary=name; break; }
+        if(sh.dateCols.length>bestN){ bestN=sh.dateCols.length; S.primary=name; }
+      }
+      if(!S.primary){ alert("No se detectaron columnas/filas de fecha en ninguna hoja."); return; }
+
+      buildLabelIndex();
+
+      const pc = S.sheets[S.primary].dateCols;
+      S.range = { from:0, to: pc.length-1 };
+      const selFrom=document.getElementById("dateFrom"), selTo=document.getElementById("dateTo");
+      selFrom.innerHTML=selTo.innerHTML="";
+      pc.forEach((d,i)=>{ selFrom.add(new Option(d.label,i)); selTo.add(new Option(d.label,i)); });
+      selTo.value = pc.length-1;
+
+      // sembrar controles de configuración con los valores actuales (editables por el usuario)
+      document.getElementById("cfgWurDest").value   = S.config.wurDest;
+      document.getElementById("cfgWur1Tank").value  = S.config.wur1Tank;
+      document.getElementById("cfgProdMeter").value = S.config.prodMeter;
+      document.getElementById("cfgRoProd").value    = S.config.roProd;
+      document.getElementById("cfgLb02").value      = S.config.lb02Label;
+      document.getElementById("cfgLb03").value      = S.config.lb03Label;
+
+      ["dateCard","cfgCard","flowsCard"].forEach(id=>document.getElementById(id).style.display="");
+      applyRange();
+      renderTanks();
+    } catch(err){
+      alert("Error leyendo Excel: "+err.message);
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ═════════════════════════ LECTURA POR ETIQUETA ═════════════════════════
+function sumLabels(labels){
+  let total=0, found=false;
+  const s=dnum(S.rangeDates.start), e=dnum(S.rangeDates.end);
+  for(const lab of labels){
+    const hit=S.labelIndex[norm(lab)]; if(!hit) continue;
+    const sh=S.sheets[hit.sheet]; if(!sh.dateCols.length) continue;
+    found=true;
+    for(const dc of sh.dateCols){
+      const dn=dnum(dc.date); if(dn!=null && s!=null && e!=null && (dn<s||dn>e)) continue;
+      const v=getCell(sh,hit.idx,dc);
+      if(typeof v==="number" && isFinite(v) && v>=0) total+=v;
+    }
+  }
+  return found?total:null;
+}
+
+function diffLabels(labels){  // totalizador: último − primero del rango
+  let result=null, found=false;
+  const s=dnum(S.rangeDates.start), e=dnum(S.rangeDates.end);
+  for(const lab of labels){
+    const hit=S.labelIndex[norm(lab)]; if(!hit) continue;
+    const sh=S.sheets[hit.sheet]; if(!sh.dateCols.length) continue;
+    found=true;
+    const pts=[];
+    for(const dc of sh.dateCols){
+      const dn=dnum(dc.date); if(dn==null) continue;
+      if(s!=null && e!=null && (dn<s||dn>e)) continue;
+      const v=getCell(sh,hit.idx,dc);
+      if(typeof v==="number" && isFinite(v) && v>=0) pts.push({dn,v});
+    }
+    if(pts.length){
+      pts.sort((a,b)=>a.dn-b.dn);
+      result=(result||0)+Math.max(0, pts[pts.length-1].v - pts[0].v);
+    }
+  }
+  return found?(result||0):null;
+}
+
+function readStream(sid){ const m=getMeta(sid); if(!m) return null; return m.tot?diffLabels(m.labels):sumLabels(m.labels); }
+
+// ═════════════════════════ RANGO / CONFIG ═════════════════════════
+function onRange(){
+  let f=parseInt(document.getElementById("dateFrom").value);
+  let t=parseInt(document.getElementById("dateTo").value);
+  if(t<f){ t=f; document.getElementById("dateTo").value=f; }
+  S.range={from:f,to:t};
+  applyRange();
+}
+function onConfig(){
+  S.config.wurDest   = document.getElementById("cfgWurDest").value;
+  S.config.wur1Tank  = document.getElementById("cfgWur1Tank").value;
+  S.config.prodMeter = document.getElementById("cfgProdMeter").value;
+  S.config.roProd    = document.getElementById("cfgRoProd").value;
+  S.config.lb02Label = document.getElementById("cfgLb02").value;
+  S.config.lb03Label = document.getElementById("cfgLb03").value;
+  applyRange();
+}
+
+function applyRange(){
+  if(!S.primary) return;
+  const pc=S.sheets[S.primary].dateCols;
+  S.rangeDates={ start:pc[S.range.from] && pc[S.range.from].date, end:pc[S.range.to] && pc[S.range.to].date };
+
+  const days=S.range.to-S.range.from+1;
+  document.getElementById("dayCount").textContent=days+(days===1?" día":" días");
+  document.getElementById("rangeCap").textContent=pc[S.range.from].label+" → "+pc[S.range.to].label;
+
+  S.flows={};
+  for(const sid of Object.keys(STREAM_METRO)) S.flows[sid]=readStream(sid);
+  S.crossProd=sumLabels(["TK-7200","TK-200"]);  // validación cruzada del producto
+
+  renderFlows(); renderBalance(); renderRecup(); renderNano(); renderLosses(); renderDiag();
+}
+
+// ═════════════════════════ INFERENCIA / ACCESO ═════════════════════════
+function inferStream(sid){
+  if(sid==="UF_Permeado")  return val("UF_Salida");
+  if(sid==="UF_Rechazo"){    const a=val("Feed_Pretrat"), b=val("UF_Salida"); if(a!=null&&b!=null) return Math.max(0,a-b); }
+  if(sid==="FFMM_Tratada"){  const a=val("UF_Permeado"),  b=val("Rechazo_Multimedia"); if(a!=null&&b!=null) return Math.max(0,a-b); }
+  if(sid==="Permeado_Nano"){ const a=val("Feed_Nano"),    b=val("Rechazo_Nano"); if(a!=null&&b!=null) return Math.max(0,a-b); }
+  if(sid==="Drenaje_NanoWUR"){ const a=val("Rechazo_Nano"), b=val("WUR1_Entrada"); if(a!=null&&b!=null) return Math.max(0,a-b); }
+  return null;
+}
+function val(sid){ const v=S.flows[sid]; return v!=null?v:inferStream(sid); }
+
+// ═════════════════════════ FLOWS TABLE ═════════════════════════
+function tagFor(sid){
+  let t="";
+  if(INFERRED.has(sid)) t+='<span class="calc-tag">calc</span>';
+  const m=getMeta(sid); if(m && m.tot) t+='<span class="tot-tag">tot</span>';
+  return t;
+}
+function labelStr(sid){
+  const m=getMeta(sid); if(!m) return "—";
+  return m.labels.join(" + ");
+}
+function renderFlows(){
+  const tb=document.getElementById("flowsTbody"); tb.innerHTML="";
+  const order=["Pozos","Agua_Potable","Feed_Pretrat","UF_Salida","UF_Rechazo",
+    "Rechazo_Azud","Rechazo_AGPlus","Rechazo_Multimedia","FFMM_Tratada","Feed_Nano","Rechazo_Nano","Permeado_Nano",
+    "WUR1_Entrada","WUR1_Permeado","WUR1_Rechazo","WUR2_Entrada","WUR2_Permeado","WUR2_Rechazo",
+    "Drenaje_NanoWUR","Desaireadores","RO_TK200","PTR_LB03","LB03_Total","LB02_Total","Agua_Producto"];
+  order.forEach(sid=>{
+    const v=val(sid);
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${STREAM_NAMES[sid]||sid}${tagFor(sid)}</td>
+      <td style="color:var(--dim);font-size:11px">${labelStr(sid)}</td>
+      <td class="num">${fmt(v)}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+// ═════════════════════════ ESTANQUES ═════════════════════════
+function renderTanks(){
+  const tb=document.getElementById("tankTbody"); tb.innerHTML="";
+  TANKS.forEach(t=>{
+    if(!S.tanks[t.id]) S.tanks[t.id]={area:null,h0:0,h1:0};
+    const tk=S.tanks[t.id];
+    tb.innerHTML+=`<tr>
+      <td>${t.nombre}</td>
+      <td><input type="number" placeholder="m²" value="${tk.area==null?"":tk.area}" style="width:80px" oninput="S.tanks['${t.id}'].area=this.value===''?null:+this.value;renderBalance()"></td>
+      <td><input type="number" value="${tk.h0}" step="0.01" style="width:70px" oninput="S.tanks['${t.id}'].h0=+this.value;renderBalance()"></td>
+      <td><input type="number" value="${tk.h1}" step="0.01" style="width:70px" oninput="S.tanks['${t.id}'].h1=+this.value;renderBalance()"></td>
+      <td class="num" id="dv_${t.id}">—</td>
+    </tr>`;
+  });
+  renderBalance();
+}
+function getTankDV(tid){ const tk=S.tanks[tid]; if(!tk||!tk.area) return 0; return (tk.h1-tk.h0)*tk.area; }
+
+// ═════════════════════════ BALANCE ═════════════════════════
+function nodeBalance(n){
+  let eSum=0,sSum=0,anyMissing=false; const rows=[];
+  const add=(sid,dir)=>{
+    const v=val(sid);
+    if(v!=null){ if(dir>0)eSum+=v; else sSum+=v; } else anyMissing=true;
+    rows.push(`<div class="stream-line"><span class="sname">${dir>0?"↗":"↘"} ${STREAM_NAMES[sid]||sid}${tagFor(sid)}</span><span>${v!=null?fmt(v):"<span style='color:var(--amber)'>?</span>"}</span></div>`);
+  };
+  n.entradas.forEach(s=>add(s,1));
+  n.salidas.forEach(s=>add(s,-1));
+  const dv=n.estanque?getTankDV(n.estanque):0;
+  const err=eSum-sSum-dv;
+  const base=Math.max(eSum,sSum);
+  const pct=base>0?Math.abs(err)/base*100:null;
+
+  let status;
+  if(n.estructural) status="estructural";
+  else if(n.noValidado) status="novalidado";
+  else if(base===0) status="sindatos";
+  else if(sSum>eSum && pct!=null && pct>TOL) status="medidor";
+  else if(pct==null) status="sindatos";
+  else if(pct<TOL) status="ok";
+  else if(pct<15) status="warn";
+  else status="bad";
+
+  return { eSum,sSum,dv,err,pct,rows,status };
+}
+function statusBadge(st){
+  const map={ ok:["b-ok","OK"], warn:["b-warn","REVISAR"], bad:["b-bad","DESVIADO"],
+    medidor:["b-warn","MEDIDOR ⚠"], novalidado:["b-info","NO VALIDADO"],
+    estructural:["b-info","ESTRUCTURAL"], sindatos:["b-info","SIN DATOS"] };
+  const [c,t]=map[st]||["b-info","—"];
+  return `<span class="badge ${c}">${t}</span>`;
+}
+
+function renderBalance(){
+  TANKS.forEach(t=>{
+    const el=document.getElementById("dv_"+t.id);
+    if(el){ const dv=getTankDV(t.id); el.textContent=S.tanks[t.id]&&S.tanks[t.id].area?fmt(dv):"—"; el.className="num "+(dv>0?"warn":dv<0?"ok":""); }
+  });
+
+  const frescas=(val("Pozos")||0)+(val("Agua_Potable")||0);
+  const producto=val("Agua_Producto");
+  const servicio=val("LB03_Total");
+  const drenajes=["Rechazo_Azud","Rechazo_AGPlus","Rechazo_Multimedia","WUR1_Rechazo","WUR2_Rechazo"]
+      .map(s=>val(s)||0).reduce((a,b)=>a+b,0) + (val("UF_Rechazo")||0) + (val("Drenaje_NanoWUR")||0);
+  const acum=TANKS.map(t=>getTankDV(t.id)).reduce((a,b)=>a+b,0);
+  const salidas=(producto||0)+(servicio||0)+drenajes+acum;
+  const residuo=frescas-salidas;
+  const pct=frescas>0?Math.abs(residuo)/frescas*100:null;
+
+  document.getElementById("balanceCards").innerHTML=`
+    <div class="bcard"><div class="label">Entradas frescas</div><div class="val" style="color:var(--green)">${fmt(frescas)}</div><div class="cap">Pozos + Potable · m³</div></div>
+    <div class="bcard"><div class="label">Producto + Servicio</div><div class="val" style="color:var(--blue)">${fmt((producto||0)+(servicio||0))}</div><div class="cap">m³</div></div>
+    <div class="bcard"><div class="label">Drenajes</div><div class="val" style="color:var(--red)">${fmt(drenajes)}</div><div class="cap">incl. UF rechazo · m³</div></div>
+    <div class="bcard"><div class="label">ΔV estanques</div><div class="val" style="color:var(--amber)">${fmt(acum)}</div><div class="cap">m³</div></div>
+    <div class="bcard"><div class="label">Residuo</div>
+      <div class="val ${pct!=null&&pct<TOL?'ok':pct!=null&&pct<15?'warn':'bad'}">${fmt(residuo)}</div>
+      <div class="cap">${pct!=null?fmtPct(pct):""}</div></div>`;
+
+  const bd=document.getElementById("balanceDiag");
+  if(pct!=null){
+    const cls=pct<TOL?"ok":pct<15?"warn":"bad";
+    const msg=pct<TOL?"Conservación cerrada":pct<15?"Desviación moderada — revisar medidores/ΔV":"Desviación alta — posible fuga o medidor faltante";
+    bd.innerHTML=`<div class="diag-item diag-${cls}"><span class="${cls}">● </span>${msg} (residuo ${fmt(residuo)} m³, ${fmtPct(pct)})</div>`;
+  } else bd.innerHTML="";
+
+  // KPIs
+  const pozos=val("Pozos");
+  const interna=(val("WUR1_Permeado")||0)+(val("WUR2_Permeado")||0)+(val("PTR_LB03")||0);
+  const eInt=pozos>0?interna/pozos*100:null;
+  const planta=(val("LB02_Total")||0)+(val("LB03_Total")||0);
+  const ePla=pozos>0?planta/pozos*100:null;
+  const clsPla=ePla==null?"":ePla>=75?"ok":ePla>=60?"warn":"bad";
+  document.getElementById("kpiCards").innerHTML=`
+    <div class="bcard"><div class="label">Recuperación interna</div><div class="val info">${fmtPct(eInt)}</div><div class="cap">WUR1+WUR2+PTR ÷ Pozos</div></div>
+    <div class="bcard"><div class="label">Recuperación de planta</div><div class="val ${clsPla}">${fmtPct(ePla)}</div><div class="cap">(LB-02+LB-03) ÷ Pozos · meta 75 %</div></div>
+    <div class="bcard"><div class="label">Pozos</div><div class="val">${fmt(pozos)}</div><div class="cap">m³</div></div>`;
+
+  // Nodos
+  const ng=document.getElementById("nodeGrid"); ng.innerHTML="";
+  getNodos().forEach(n=>{
+    const b=nodeBalance(n);
+    const showErr=["ok","warn","bad","medidor"].includes(b.status) && b.pct!=null;
+    const footColor=b.status==="ok"?"var(--green)":b.status==="warn"||b.status==="medidor"?"var(--amber)":b.status==="bad"?"var(--red)":"var(--dim)";
+    const extra=b.status==="medidor"?`<div class="cap" style="color:var(--amber)">⚠️ Salidas &gt; entrada: medidor sospechoso, no es pérdida física.</div>`:"";
+    ng.innerHTML+=`<div class="node-card">
+      <div class="node-title"><span>${n.nombre}</span>${statusBadge(b.status)}</div>
+      ${b.rows.join("")||'<div class="cap">paso sin pérdida (sin medidor)</div>'}
+      ${b.dv!==0?`<div class="stream-line"><span class="sname">⊿ Acumulación (${n.estanque})</span><span style="color:var(--amber)">${fmt(b.dv)}</span></div>`:""}
+      ${showErr?`<div style="border-top:1px solid var(--bord);margin-top:6px;padding-top:6px;font-size:11px;color:${footColor}">Error nodo: ${fmt(b.err)} m³ (${fmtPct(b.pct)})</div>`:""}
+      ${extra}
+    </div>`;
+  });
+}
+
+// ═════════════════════════ RECUPERACIÓN ═════════════════════════
+function renderRecup(){
+  const el=document.getElementById("recupList");
+  if(!S.primary){ el.innerHTML="<p style='color:var(--dim)'>Carga un archivo Excel para ver el ranking.</p>"; return; }
+  const results=EQUIPOS_RECUP.map(eq=>{
+    const perm=sumLabels([eq.perm]);
+    const rech=eq.rech?sumLabels([eq.rech]):null;
+    let efic=null, fuera=false;
+    if(perm==null && rech==null){}
+    else if((perm||0)===0 && (rech||0)===0) fuera=true;
+    else { const tot=(perm||0)+(rech||0); efic=tot>0?(perm||0)/tot*100:null; }
+    return {eq,perm,rech,efic,fuera};
+  });
+  results.sort((a,b)=>(a.efic==null?Infinity:a.efic)-(b.efic==null?Infinity:b.efic));
+  el.innerHTML="";
+  results.forEach((r,i)=>{
+    const rank=i+1, rankColor=rank===1?"var(--red)":rank===2?"var(--amber)":"var(--green)";
+    const efic=r.efic, barColor=efic==null?"var(--dim)":efic<50?"var(--red)":efic<70?"var(--amber)":"var(--green)";
+    const barW=efic!=null?Math.min(100,efic).toFixed(1):0;
+    const eficTxt=r.fuera?'<span class="info">fuera de servicio</span>':efic==null?'<span class="info">sin datos</span>':`<span style="color:${barColor}">${fmtPct(efic)}</span>`;
+    el.innerHTML+=`<div style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;margin-bottom:4px">
+        <div class="rank-badge" style="background:${rankColor};color:#0f172a;margin-right:8px">${rank}</div>
+        <span style="font-weight:600;font-size:14px">${r.eq.nombre}</span>
+        <span style="margin-left:auto;font-size:13px;font-weight:700">${eficTxt}</span>
+      </div>
+      <div class="rec-bar-bg"><div class="rec-bar" style="width:${barW}%;background:${barColor}"></div></div>
+      <div style="display:flex;gap:20px;margin-top:4px;font-size:11px;color:var(--dim)">
+        <span>Permeado: ${fmt(r.perm)} m³</span>
+        <span>Rechazo: ${r.rech!=null?fmt(r.rech):"—"} m³</span>
+        ${r.rech!=null?`<span style="color:var(--red)">Pérdida: ${fmt(r.rech)} m³</span>`:""}
+      </div>
+    </div>`;
+  });
+}
+
+// ═════════════════════════ NANO DÍA A DÍA ═════════════════════════
+// Valor diario (no acumulado) de una corriente, por fecha dentro del rango.
+// Devuelve Map: dn(yyyymmdd) -> {date, v}. Suma etiquetas múltiples del mismo día.
+function dailyStream(sid){
+  const map=new Map();
+  const m=getMeta(sid); if(!m) return map;
+  const s=dnum(S.rangeDates.start), e=dnum(S.rangeDates.end);
+  for(const lab of m.labels){
+    const hit=S.labelIndex[norm(lab)]; if(!hit) continue;
+    const sh=S.sheets[hit.sheet]; if(!sh.dateCols.length) continue;
+    for(const dc of sh.dateCols){
+      const dn=dnum(dc.date); if(dn==null) continue;
+      if(s!=null && e!=null && (dn<s||dn>e)) continue;
+      const v=getCell(sh,hit.idx,dc);
+      if(typeof v==="number" && isFinite(v) && v>=0){
+        const cur=map.get(dn)||{date:dc.date,v:0}; cur.v+=v; map.set(dn,cur);
+      }
+    }
+  }
+  return map;
+}
+
+// Serie diaria de eficiencia NF: efic = (Total Nano − Rechazo nano) / Total Nano.
+function nanoDailySeries(){
+  const tot=dailyStream("Feed_Nano"), rech=dailyStream("Rechazo_Nano");
+  return [...tot.keys()].sort((a,b)=>a-b).map(dn=>{
+    const t=tot.get(dn).v;
+    const r=rech.has(dn)?rech.get(dn).v:null;
+    const perm=r!=null?Math.max(0,t-r):null;
+    const efic=(t>0 && perm!=null)?perm/t*100:null;
+    return { dn, date:tot.get(dn).date, tot:t, rech:r, perm, efic };
+  }).filter(d=>d.tot>0);
+}
+
+// Gráfico de líneas en SVG (sin dependencias), eje Y autoescalado a los datos.
+function nanoChartSVG(data, avg){
+  const W=760, H=300, padL=46, padR=18, padT=18, padB=44;
+  const plotW=W-padL-padR, plotH=H-padT-padB;
+  const efics=data.filter(d=>d.efic!=null).map(d=>d.efic);
+  const lo=Math.min(...efics), hi=Math.max(...efics);
+  const p=Math.max(1,(hi-lo)*0.18);
+  let y0=Math.max(0,Math.floor(lo-p)), y1=Math.min(100,Math.ceil(hi+p));
+  if(y0>=y1){ y0=Math.max(0,y0-2); y1=Math.min(100,y1+2); }
+  const n=data.length;
+  const xFor=i=> padL + (n<=1 ? plotW/2 : plotW*i/(n-1));
+  const yFor=v=> padT + plotH*(1-(v-y0)/(y1-y0));
+  let grid="";
+  for(let k=0;k<=4;k++){
+    const val=y0+(y1-y0)*k/4, y=yFor(val);
+    grid+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="#334155"/>`+
+          `<text x="${padL-7}" y="${(y+3).toFixed(1)}" fill="#94a3b8" font-size="10" text-anchor="end">${val.toFixed(0)}%</text>`;
+  }
+  let path="", dots="", xl="";
+  data.forEach((d,i)=>{
+    if(d.efic==null) return;
+    const x=xFor(i), y=yFor(d.efic);
+    path+=(path?"L":"M")+x.toFixed(1)+" "+y.toFixed(1)+" ";
+    const c=d.efic>=85?"#4ade80":d.efic>=75?"#fbbf24":"#f87171";
+    dots+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.4" fill="${c}"><title>${dlabel(d.date,d.dn)} · ${d.efic.toFixed(1)} %</title></circle>`;
+  });
+  const every=Math.ceil(n/12);
+  data.forEach((d,i)=>{
+    if(i%every!==0 && i!==n-1) return;
+    xl+=`<text x="${xFor(i).toFixed(1)}" y="${H-padB+16}" fill="#94a3b8" font-size="10" text-anchor="middle">${dlabel(d.date,d.dn)}</text>`;
+  });
+  const yA=yFor(avg);
+  const avgLine=`<line x1="${padL}" y1="${yA.toFixed(1)}" x2="${W-padR}" y2="${yA.toFixed(1)}" stroke="#818cf8" stroke-width="1.2" stroke-dasharray="5 4"/>`+
+    `<text x="${(W-padR).toFixed(1)}" y="${(yA-4).toFixed(1)}" fill="#818cf8" font-size="10" text-anchor="end">prom ${avg.toFixed(1)} %</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="height:auto;background:#0f172a;border-radius:8px">
+    ${grid}<path d="${path}" fill="none" stroke="#38bdf8" stroke-width="2"/>${avgLine}${dots}${xl}
+    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H-padB}" stroke="#475569"/>
+    <line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="#475569"/>
+  </svg>`;
+}
+
+function renderNano(){
+  const chart=document.getElementById("nanoChart");
+  const tb=document.getElementById("nanoTbody");
+  const stats=document.getElementById("nanoStats");
+  if(!S.primary){ chart.innerHTML="<p style='color:var(--dim)'>Carga un archivo Excel para ver la eficiencia diaria.</p>"; tb.innerHTML=""; stats.innerHTML=""; return; }
+  const data=nanoDailySeries();
+  if(!data.length){
+    chart.innerHTML="<p style='color:var(--amber)'>Sin datos diarios de «Total Nano» en el rango seleccionado.</p>";
+    tb.innerHTML=""; stats.innerHTML=""; return;
+  }
+  const efics=data.filter(d=>d.efic!=null).map(d=>d.efic);
+  if(!efics.length){
+    chart.innerHTML="<p style='color:var(--amber)'>Hay «Total Nano» pero falta «Rechazo nano» para calcular la eficiencia.</p>";
+    stats.innerHTML="";
+  } else {
+    const avg=efics.reduce((a,b)=>a+b,0)/efics.length;
+    const max=Math.max(...efics), min=Math.min(...efics);
+    const maxD=data.find(d=>d.efic===max), minD=data.find(d=>d.efic===min);
+    const permTot=data.reduce((a,b)=>a+(b.perm||0),0);
+    chart.innerHTML=nanoChartSVG(data, avg);
+    stats.innerHTML=`
+      <div class="bcard"><div class="label">Eficiencia promedio</div><div class="val info">${fmtPct(avg)}</div><div class="cap">${efics.length} día(s) con dato</div></div>
+      <div class="bcard"><div class="label">Mejor día</div><div class="val ok">${fmtPct(max)}</div><div class="cap">${dlabel(maxD.date,maxD.dn)}</div></div>
+      <div class="bcard"><div class="label">Peor día</div><div class="val bad">${fmtPct(min)}</div><div class="cap">${dlabel(minD.date,minD.dn)}</div></div>
+      <div class="bcard"><div class="label">Permeado acumulado</div><div class="val" style="color:var(--blue)">${fmt(permTot)}</div><div class="cap">m³ · suma del rango</div></div>`;
+  }
+  tb.innerHTML=data.map(d=>{
+    const c=d.efic==null?"":d.efic>=85?"ok":d.efic>=75?"warn":"bad";
+    return `<tr>
+      <td>${dlabel(d.date,d.dn)}</td>
+      <td class="num">${fmt(d.tot)}</td>
+      <td class="num">${d.rech!=null?fmt(d.rech):"—"}</td>
+      <td class="num">${d.perm!=null?fmt(d.perm):"—"}</td>
+      <td class="num ${c}">${d.efic!=null?fmtPct(d.efic):"—"}</td>
+    </tr>`;
+  }).join("");
+}
+
+// ═════════════════════════ PÉRDIDAS ═════════════════════════
+function renderLosses(){
+  const el=document.getElementById("lossList");
+  if(!S.primary){ el.innerHTML="<p style='color:var(--dim)'>Carga un archivo Excel para ver pérdidas.</p>"; return; }
+  const items=[
+    {nombre:"UF rechazo (drenaje)", v:val("UF_Rechazo")},
+    {nombre:"Rechazo Azud",         v:val("Rechazo_Azud")},
+    {nombre:"Rechazo AG+",          v:val("Rechazo_AGPlus")},
+    {nombre:"Rechazo Multimedia",   v:val("Rechazo_Multimedia")},
+    {nombre:"WUR1 Rechazo",         v:val("WUR1_Rechazo")},
+    {nombre:"WUR2 Rechazo",         v:val("WUR2_Rechazo")},
+    {nombre:"Drenaje rechazo NF",   v:val("Drenaje_NanoWUR")},
+  ];
+  items.sort((a,b)=>(b.v||0)-(a.v||0));
+  const maxV=Math.max(...items.map(l=>l.v||0),1);
+  el.innerHTML="";
+  items.forEach((l,i)=>{
+    const barW=l.v!=null?(l.v/maxV*100).toFixed(1):0;
+    el.innerHTML+=`<div class="loss-row">
+      <div class="rank-badge" style="background:var(--red);color:#fff">${i+1}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;margin-bottom:3px">${l.nombre}</div>
+        <div class="rec-bar-bg"><div class="rec-bar" style="width:${barW}%;background:var(--red)"></div></div>
+      </div>
+      <div style="width:90px;text-align:right;font-size:13px;font-weight:700;color:var(--red)">${fmt(l.v)} m³</div>
+    </div>`;
+  });
+}
+
+// ═════════════════════════ DIAGNÓSTICO ═════════════════════════
+function renderDiag(){
+  const el=document.getElementById("diagList");
+  if(!S.primary){ el.innerHTML="<p style='color:var(--dim)'>Carga un archivo Excel para ver el diagnóstico.</p>"; return; }
+  const items=[];
+
+  items.push({cls:"info", msg:`Hojas: ${S.sheetOrder.map(n=>n+" ["+(S.sheets[n].axis||"?")+"]").join(", ")} · calendario: ${S.primary}`});
+
+  for(const w of (S.labelWarnings||[]))
+    items.push({cls:"warn", msg:`Índice etiquetas: ${w}`});
+
+  // verificación lecturas clave
+  items.push({cls:"info", msg:`Lecturas clave → Feed UF: ${fmt(val("Feed_Pretrat"))} · UF salida: ${fmt(val("UF_Salida"))} · PTR→LB-03: ${fmt(val("PTR_LB03"))} m³`});
+
+  // medidores faltantes
+  for(const sid of Object.keys(STREAM_METRO)){
+    if(val(sid)==null) items.push({cls:"warn", msg:`Sin datos: ${STREAM_NAMES[sid]||sid} — etiqueta "${labelStr(sid)}" no encontrada.`});
+  }
+
+  // validación por nodo
+  getNodos().forEach(n=>{
+    const b=nodeBalance(n);
+    if(b.status==="medidor") items.push({cls:"bad", msg:`${n.nombre}: salidas (${fmt(b.sSum)}) &gt; entrada (${fmt(b.eSum)}) → medidor sospechoso, NO pérdida física (${fmtPct(b.pct)}).`});
+    else if(b.status==="bad") items.push({cls:"bad", msg:`${n.nombre}: desviación alta ${fmtPct(b.pct)} (${fmt(b.err)} m³).`});
+    else if(b.status==="warn") items.push({cls:"warn", msg:`${n.nombre}: desviación ${fmtPct(b.pct)} — revisar.`});
+    else if(b.status==="novalidado") items.push({cls:"info", msg:`${n.nombre}: ${n.noValidadoMsg||"topología no validada"} → NO VALIDADO.`});
+    else if(b.status==="ok") items.push({cls:"ok", msg:`${n.nombre}: cierre OK (${fmtPct(b.pct)}).`});
+  });
+
+  // validación cruzada producto
+  const prod=val("Agua_Producto"), cross=S.crossProd;
+  if(prod!=null && cross!=null && cross>0){
+    const d=Math.abs(prod-cross)/cross*100;
+    items.push({cls:d<10?"ok":"warn", msg:`Validación cruzada producto: M³ Bebida=${fmt(prod)} vs TK-7200+TK-200=${fmt(cross)} (Δ ${fmtPct(d)}).`});
+  }
+
+  el.innerHTML=items.map(i=>`<div class="diag-item diag-${i.cls}"><span class="${i.cls}">● </span>${i.msg}</div>`).join("");
+}
+
+// ═════════════════════════ TABS ═════════════════════════
+function showTab(name){
+  const ids=["datos","estanques","balance","recup","nano","perdidas","diag"];
+  document.querySelectorAll(".tab").forEach((t,i)=>t.classList.toggle("active", ids[i]===name));
+  document.querySelectorAll(".tab-content").forEach(c=>c.classList.toggle("active", c.id==="tab-"+name));
+}
+
+TANKS.forEach(t=>{ S.tanks[t.id]={area:null,h0:0,h1:0}; });
+renderTanks();
+</script>
+</body>
+</html>
