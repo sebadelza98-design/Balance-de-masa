@@ -159,15 +159,6 @@ select,input[type=number],input[type=text]{background:var(--bg);color:var(--txt)
     </div>
   </div>
 
-  <div class="card" id="srcCard" style="display:none">
-    <div class="card-title">🔀 Fuentes de etiquetas duplicadas</div>
-    <p class="cap" style="margin-bottom:10px">Estas etiquetas del modelo aparecen en más de una hoja/posición del archivo. Elige cuál usar — el monto entre paréntesis es la suma de cada fuente en el rango actual. Tu elección se guarda en este navegador.</p>
-    <table>
-      <thead><tr><th>Etiqueta</th><th>Fuente usada</th></tr></thead>
-      <tbody id="srcTbody"></tbody>
-    </table>
-  </div>
-
   <div class="card" id="flowsCard" style="display:none">
     <div class="card-title">Caudales leídos (m³ · período)</div>
     <table>
@@ -236,6 +227,13 @@ select,input[type=number],input[type=text]{background:var(--bg);color:var(--txt)
   <div class="card">
     <div class="card-title">Drenajes / pérdidas reales — mayor a menor</div>
     <p class="cap" style="margin-bottom:12px">Sólo corrientes que abandonan la planta (no recirculadas).</p>
+    <div class="date-row" id="lossRangeRow" style="display:none">
+      <label>Comparar con otro rango</label>
+      <select id="lossFrom"></select>
+      <label>hasta</label>
+      <select id="lossTo"></select>
+      <span id="lossRangeCap" class="cap"></span>
+    </div>
     <div id="lossList"></div>
   </div>
 </div>
@@ -257,6 +255,7 @@ const S = {
   labelWarnings: [], // etiquetas duplicadas detectadas al indexar
   primary: null,
   range: { from:0, to:0 },
+  lossRange: { from:-1, to:-1 },   // rango adicional de comparación en Pérdidas (-1 = sin comparar)
   rangeDates: { start:null, end:null },
   flows: {},
   crossProd: null,
@@ -421,7 +420,6 @@ function fmt(v,d=0){ return v==null?"—":v.toLocaleString("es-CL",{maximumFract
 function fmtPct(v){ return v==null?"—":v.toFixed(1)+" %"; }
 function dnum(d){ return d instanceof Date ? d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate() : null; }
 function esc(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-function colName(i){ let s=""; i++; while(i>0){ s=String.fromCharCode(65+(i-1)%26)+s; i=Math.floor((i-1)/26); } return s; }
 
 function showError(msg){ const el=document.getElementById("errBox"); el.innerHTML="⚠️ "+msg; el.style.display=""; }
 function hideError(){ document.getElementById("errBox").style.display="none"; }
@@ -697,6 +695,14 @@ function onExcel(evt){
       pc.forEach((d,i)=>{ selFrom.add(new Option(d.label,i)); selTo.add(new Option(d.label,i)); });
       selTo.value = pc.length-1;
 
+      // rango adicional de comparación en Pérdidas
+      S.lossRange={from:-1, to:-1};
+      const selLF=document.getElementById("lossFrom"), selLT=document.getElementById("lossTo");
+      selLF.innerHTML=selLT.innerHTML="";
+      selLF.add(new Option("—","-1")); selLT.add(new Option("—","-1"));
+      pc.forEach((d,i)=>{ selLF.add(new Option(d.label,i)); selLT.add(new Option(d.label,i)); });
+      document.getElementById("lossRangeRow").style.display="";
+
       seedConfigUI();
 
       ["dateCard","cfgCard","flowsCard"].forEach(id=>document.getElementById(id).style.display="");
@@ -822,44 +828,15 @@ function applyRange(){
   for(const sid of Object.keys(STREAM_METRO)) S.flows[sid]=readStream(sid);
   S.crossProd=sumLabels(["TK-7200","TK-200"]);  // validación cruzada del producto
 
-  renderLabelSources();
   renderFlows(); renderBalance(); renderRecup(); renderNano(); renderLosses(); renderDiag();
 }
 
-// Etiquetas del modelo con más de una ocurrencia en el archivo: selector de fuente.
+// Etiquetas usadas por el modelo (corrientes + equipos de recuperación).
 function usedModelLabels(){
   const used=new Set();
   for(const sid of Object.keys(STREAM_METRO)){ const m=getMeta(sid); if(m) m.labels.forEach(l=>used.add(norm(l))); }
   EQUIPOS_RECUP.forEach(eq=>{ used.add(norm(eq.perm)); if(eq.rech) used.add(norm(eq.rech)); });
   return used;
-}
-function renderLabelSources(){
-  const card=document.getElementById("srcCard"), tb=document.getElementById("srcTbody");
-  const rows=[];
-  S._srcOcc={};
-  for(const k of [...usedModelLabels()].sort()){
-    const alts=(S.labelAlts||{})[k]; if(!alts || !alts.length) continue;
-    const occ=[S.labelIndex[k], ...alts].filter(Boolean);
-    const eff=labelHit(k);
-    // mostrar sólo si hay una elección real: una alternativa con datos en el
-    // rango, o una fuente ya elegida por el usuario (para poder revertirla);
-    // así los duplicados fantasma (relleno de combinadas, columnas vacías) no
-    // ensucian el selector
-    const hasOverride=!!((S.config.labelSources||{})[k]);
-    const otras=occ.filter(o=>!(eff && o.sheet===eff.sheet && o.idx===eff.idx));
-    if(!hasOverride && !otras.some(o=>(sumHit(o)||0)>0)) continue;
-    S._srcOcc[k]=occ;
-    const opts=occ.map((o,i)=>{
-      const sh=S.sheets[o.sheet];
-      const pos=sh && sh.axis==="v" ? "col "+colName(o.idx) : "fila "+(o.idx+1);
-      const sum=sumHit(o);
-      const sel=(eff && o.sheet===eff.sheet && o.idx===eff.idx)?" selected":"";
-      return `<option value="${i}"${sel}>${esc(o.sheet)} · ${pos} (${sum==null?"—":fmt(sum)} m³)</option>`;
-    }).join("");
-    rows.push(`<tr><td>${esc(k)}</td><td><select data-srclabel="${esc(k)}">${opts}</select></td></tr>`);
-  }
-  if(rows.length){ tb.innerHTML=rows.join(""); card.style.display=""; }
-  else { tb.innerHTML=""; card.style.display="none"; }
 }
 
 // ═════════════════════════ INFERENCIA / ACCESO ═════════════════════════
@@ -1160,29 +1137,77 @@ function renderNano(){
 }
 
 // ═════════════════════════ PÉRDIDAS ═════════════════════════
+const LOSS_DEFS=[
+  ["UF rechazo (drenaje)","UF_Rechazo"],
+  ["Rechazo Azud","Rechazo_Azud"],
+  ["Rechazo AG+","Rechazo_AGPlus"],
+  ["Rechazo Multimedia","Rechazo_Multimedia"],
+  ["WUR1 Rechazo","WUR1_Rechazo"],
+  ["WUR2 Rechazo","WUR2_Rechazo"],
+  ["Drenaje rechazo NF","Drenaje_NanoWUR"],
+];
+
+// Lee las corrientes de pérdidas para un rango arbitrario sin tocar el rango
+// global ni el diagnóstico (cachés y contadores se restauran al salir).
+function lossFlowsFor(start, end){
+  const savedR=S.rangeDates, savedF=S.flows, savedQ=S.dataQuality, savedS=S.dqSeen, savedT=S.totResets;
+  S.rangeDates={start, end};
+  S.flows={}; S.dataQuality=new Map(); S.dqSeen=new Set(); S.totResets=[];
+  const out={};
+  try{
+    for(const sid of Object.keys(STREAM_METRO)) S.flows[sid]=readStream(sid);
+    for(const [,sid] of LOSS_DEFS) out[sid]=val(sid);
+  } finally {
+    S.rangeDates=savedR; S.flows=savedF; S.dataQuality=savedQ; S.dqSeen=savedS; S.totResets=savedT;
+  }
+  return out;
+}
+
+// Variación porcentual respecto al rango de comparación (▲ = más pérdida).
+function deltaTag(v, ref){
+  if(v==null || ref==null || ref<=0) return "";
+  const d=(v-ref)/ref*100, up=d>=0;
+  return ` <span style="color:${up?"var(--red)":"var(--green)"}">${up?"▲":"▼"} ${Math.abs(d).toFixed(1)} %</span>`;
+}
+
 function renderLosses(){
   const el=document.getElementById("lossList");
   if(!S.primary){ el.innerHTML="<p style='color:var(--dim)'>Carga un archivo Excel para ver pérdidas.</p>"; return; }
-  const items=[
-    {nombre:"UF rechazo (drenaje)", v:val("UF_Rechazo")},
-    {nombre:"Rechazo Azud",         v:val("Rechazo_Azud")},
-    {nombre:"Rechazo AG+",          v:val("Rechazo_AGPlus")},
-    {nombre:"Rechazo Multimedia",   v:val("Rechazo_Multimedia")},
-    {nombre:"WUR1 Rechazo",         v:val("WUR1_Rechazo")},
-    {nombre:"WUR2 Rechazo",         v:val("WUR2_Rechazo")},
-    {nombre:"Drenaje rechazo NF",   v:val("Drenaje_NanoWUR")},
-  ];
+  const items=LOSS_DEFS.map(([nombre,sid])=>({nombre,sid,v:val(sid)}));
+
+  // rango adicional de comparación (opcional)
+  const pc=S.sheets[S.primary].dateCols;
+  const lf=S.lossRange.from, lt=S.lossRange.to;
+  const cmp=(lf>=0 && lt>=0 && pc[lf] && pc[lt]) ? lossFlowsFor(pc[lf].date, pc[lt].date) : null;
+  document.getElementById("lossRangeCap").textContent=cmp?`comparando con ${pc[lf].label} → ${pc[lt].label}`:"";
+
   items.sort((a,b)=>(b.v||0)-(a.v||0));
   const maxV=Math.max(...items.map(l=>l.v||0),1);
-  el.innerHTML=items.map((l,i)=>{
+  const tot=items.reduce((a,b)=>a+(b.v||0),0);
+  let head=`<div class="cap" style="margin-bottom:8px">Total pérdidas del rango: <b style="color:var(--red)">${fmt(tot)} m³</b>`;
+  if(cmp){
+    const ctot=LOSS_DEFS.reduce((a,[,sid])=>a+(cmp[sid]||0),0);
+    head+=` · otro rango: <b>${fmt(ctot)} m³</b>${deltaTag(tot,ctot)}`;
+  }
+  head+=`</div>`;
+
+  el.innerHTML=head+items.map((l,i)=>{
     const barW=l.v!=null?(l.v/maxV*100).toFixed(1):0;
+    let cmpHtml="";
+    if(cmp){
+      const c=cmp[l.sid];
+      cmpHtml=`<div class="cap">otro: ${c!=null?fmt(c):"—"} m³${c!=null?deltaTag(l.v,c):""}</div>`;
+    }
     return `<div class="loss-row">
       <div class="rank-badge" style="background:var(--red);color:#fff">${i+1}</div>
       <div style="flex:1">
         <div style="font-size:13px;margin-bottom:3px">${l.nombre}</div>
         <div class="rec-bar-bg"><div class="rec-bar" style="width:${barW}%;background:var(--red)"></div></div>
       </div>
-      <div style="width:90px;text-align:right;font-size:13px;font-weight:700;color:var(--red)">${fmt(l.v)} m³</div>
+      <div style="min-width:110px;text-align:right">
+        <div style="font-size:13px;font-weight:700;color:var(--red)">${fmt(l.v)} m³</div>
+        ${cmpHtml}
+      </div>
     </div>`;
   }).join("");
 }
@@ -1197,7 +1222,7 @@ function renderDiag(){
 
   for(const name of S.sheetOrder){
     const sh=S.sheets[name];
-    if(sh.virtual){ items.push({cls:"info", msg:`Hoja "${esc(name)}": tabla apilada detectada (${sh.dateCols.length} fechas); disponible como fuente en «Fuentes de etiquetas duplicadas».`}); continue; }
+    if(sh.virtual){ items.push({cls:"info", msg:`Hoja "${esc(name)}": tabla apilada detectada (${sh.dateCols.length} fechas); disponible como fuente alternativa de etiquetas.`}); continue; }
     if(sh.ignoredDates) items.push({cls:"info", msg:`Hoja "${esc(name)}": ${sh.ignoredDates} celda(s) de fecha fuera del calendario principal fueron ignoradas (tabla secundaria/resumen) para no duplicar sumas.`});
   }
 
@@ -1215,7 +1240,7 @@ function renderDiag(){
     const conDatos=otras.map(a=>({a,s:sumHit(a)})).filter(x=>x.s>0);
     if(conDatos.length){
       const det=conDatos.map(x=>`"${esc(x.a.sheet)}" (${fmt(x.s)} m³)`).join(", ");
-      items.push({cls:"warn", msg:`Etiqueta "${esc(k)}": la fuente usada (${esc(eff.sheet)}) suma ${wSum==null?"—":"0"} en el rango, pero hay otras coincidencias con datos: ${det}. Elige la fuente en Datos → «Fuentes de etiquetas duplicadas».`});
+      items.push({cls:"warn", msg:`Etiqueta "${esc(k)}": la fuente usada (${esc(eff.sheet)}) suma ${wSum==null?"—":"0"} en el rango, pero hay otras coincidencias con datos: ${det}. Revisa cuál es la fuente correcta.`});
     }
   }
 
@@ -1279,17 +1304,13 @@ document.getElementById("dateFrom").addEventListener("change", onRange);
 document.getElementById("dateTo").addEventListener("change", onRange);
 ["cfgWurDest","cfgWur1Tank","cfgProdMeter","cfgRoProd"].forEach(id=>document.getElementById(id).addEventListener("change", onConfig));
 ["cfgLb02","cfgLb03"].forEach(id=>document.getElementById(id).addEventListener("input", onConfig));
-document.getElementById("srcTbody").addEventListener("change", e=>{
-  const k=e.target.dataset.srclabel; if(!k) return;
-  const occ=(S._srcOcc||{})[k]||[];
-  const o=occ[+e.target.value]; if(!o) return;
-  if(!S.config.labelSources) S.config.labelSources={};
-  const def=S.labelIndex[k];
-  if(def && o.sheet===def.sheet && o.idx===def.idx) delete S.config.labelSources[k];
-  else S.config.labelSources[k]={sheet:o.sheet, idx:o.idx};
-  saveLocal();
-  applyRange();
-});
+["lossFrom","lossTo"].forEach(id=>document.getElementById(id).addEventListener("change", ()=>{
+  let f=parseInt(document.getElementById("lossFrom").value);
+  let t=parseInt(document.getElementById("lossTo").value);
+  if(f>=0 && t>=0 && t<f){ t=f; document.getElementById("lossTo").value=String(f); }
+  S.lossRange={from:f, to:t};
+  renderLosses();
+}));
 document.getElementById("tankTbody").addEventListener("input", e=>{
   const inp=e.target, tid=inp.dataset.tank, f=inp.dataset.field;
   if(!tid || !f || !S.tanks[tid]) return;
