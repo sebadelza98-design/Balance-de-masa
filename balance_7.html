@@ -491,6 +491,25 @@ function cellDate(ws,r,c,val){
 }
 function dlabel(d,fallback){ return d ? d.toLocaleDateString("es-CL",{day:"2-digit",month:"2-digit"}) : String(fallback); }
 
+// Agrupa las celdas-fecha en corridas contiguas (tolerando huecos pequeños por
+// celdas vacías o combinadas) y se queda con la corrida más larga: un hueco no
+// trunca el calendario, pero una segunda tabla de fechas lejana en la misma
+// fila/columna (p.ej. un bloque resumen a la derecha) no contamina el rango
+// ni duplica las sumas.
+const DATE_GAP = 2;   // huecos (celdas no-fecha) tolerados dentro del calendario
+function longestDateRun(cells){
+  if(!cells.length) return { run:[], ignored:0 };
+  const runs=[]; let cur=[cells[0]];
+  for(let i=1;i<cells.length;i++){
+    if(cells[i].key - cells[i-1].key - 1 <= DATE_GAP) cur.push(cells[i]);
+    else { runs.push(cur); cur=[cells[i]]; }
+  }
+  runs.push(cur);
+  let best=runs[0];
+  for(const r of runs) if(r.length>best.length) best=r;
+  return { run:best, ignored:cells.length-best.length };
+}
+
 function detectAxis(ws, grid){
   const nRows = grid.length;
   let maxCols = 0; for(const r of grid) if(r) maxCols = Math.max(maxCols, r.length);
@@ -511,19 +530,21 @@ function detectAxis(ws, grid){
   }
 
   if(hCnt>=vCnt && hCnt>=3){
-    const row=grid[hRow]||[], dateCols=[];
-    // sin "break": una celda vacía o combinada en medio del calendario no trunca el rango
+    const row=grid[hRow]||[], all=[];
     for(let c=0; c<row.length; c++){
-      if(isDateCell(ws,hRow,c,row[c])){ const d=cellDate(ws,hRow,c,row[c]); dateCols.push({key:c,date:d,label:dlabel(d,c)}); }
+      if(isDateCell(ws,hRow,c,row[c])){ const d=cellDate(ws,hRow,c,row[c]); all.push({key:c,date:d,label:dlabel(d,c)}); }
     }
-    return { axis:"h", dateCols, headerRow:hRow };
+    const {run,ignored}=longestDateRun(all);
+    return { axis:"h", dateCols:run, headerRow:hRow, ignoredDates:ignored };
   }
   if(vCnt>=3){
-    const dateCols=[]; let firstRow=-1;
+    const all=[];
     for(let r=0; r<nRows; r++){
       const v=(grid[r]||[])[vCol];
-      if(isDateCell(ws,r,vCol,v)){ if(firstRow<0) firstRow=r; const d=cellDate(ws,r,vCol,v); dateCols.push({key:r,date:d,label:dlabel(d,r)}); }
+      if(isDateCell(ws,r,vCol,v)){ const d=cellDate(ws,r,vCol,v); all.push({key:r,date:d,label:dlabel(d,r)}); }
     }
+    const {run,ignored}=longestDateRun(all);
+    const firstRow=run.length?run[0].key:-1;
     // fila de encabezados = fila con más strings antes del primer dato
     let hr=0, hsc=-1;
     for(let r=0; r<Math.max(1,firstRow); r++){
@@ -531,9 +552,9 @@ function detectAxis(ws, grid){
       for(let c=0; c<row.length; c++) if(typeof row[c]==="string" && row[c].trim()) cnt++;
       if(cnt>hsc){ hsc=cnt; hr=r; }
     }
-    return { axis:"v", dateCols, headerRow:hr };
+    return { axis:"v", dateCols:run, headerRow:hr, ignoredDates:ignored };
   }
-  return { axis:null, dateCols:[], headerRow:-1 };
+  return { axis:null, dateCols:[], headerRow:-1, ignoredDates:0 };
 }
 
 function buildLabelIndex(){
@@ -1057,6 +1078,11 @@ function renderDiag(){
   const items=[];
 
   items.push({cls:"info", msg:`Hojas: ${S.sheetOrder.map(n=>esc(n)+" ["+(S.sheets[n].axis||"?")+"]").join(", ")} · calendario: ${esc(S.primary)}`});
+
+  for(const name of S.sheetOrder){
+    const ig=S.sheets[name].ignoredDates;
+    if(ig) items.push({cls:"info", msg:`Hoja "${esc(name)}": ${ig} celda(s) de fecha fuera del calendario principal fueron ignoradas (tabla secundaria/resumen) para no duplicar sumas.`});
+  }
 
   for(const w of (S.labelWarnings||[]))
     items.push({cls:"warn", msg:`Índice etiquetas: ${esc(w)}`});
