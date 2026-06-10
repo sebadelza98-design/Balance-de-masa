@@ -560,12 +560,15 @@ function detectAxis(ws, grid){
 function buildLabelIndex(){
   S.labelIndex = {};
   S.labelWarnings = [];
+  S.labelAlts = {};   // k -> ocurrencias alternativas no usadas (para detectar datos eclipsados)
   function addLabel(k, sheet, idx){
     if(!k) return;
     if(k in S.labelIndex){
       const e = S.labelIndex[k];
-      if(e.sheet!==sheet || e.idx!==idx)
+      if(e.sheet!==sheet || e.idx!==idx){
+        (S.labelAlts[k] = S.labelAlts[k]||[]).push({sheet, idx});
         S.labelWarnings.push(`"${k}" ya indexada en hoja "${e.sheet}" idx ${e.idx}; ignorada en "${sheet}" idx ${idx}`);
+      }
     } else {
       S.labelIndex[k] = {sheet, idx};
     }
@@ -709,6 +712,21 @@ function diffLabels(labels){  // totalizador: suma de incrementos diarios (resis
 }
 
 function readStream(sid){ const m=getMeta(sid); if(!m) return null; return m.tot?diffLabels(m.labels):sumLabels(m.labels); }
+
+// Suma de una ocurrencia específica de etiqueta (misma lógica que sumLabels,
+// sin contabilidad de descartes). Se usa para detectar datos eclipsados por
+// la regla "la primera hoja que define la etiqueta gana".
+function sumHit(hit){
+  const sh=S.sheets[hit.sheet]; if(!sh || !sh.dateCols.length) return null;
+  const s=dnum(S.rangeDates.start), e=dnum(S.rangeDates.end);
+  let t=0;
+  for(const dc of sh.dateCols){
+    const dn=dnum(dc.date); if(dn!=null && s!=null && e!=null && (dn<s||dn>e)) continue;
+    const v=cellNum(getCell(sh,hit.idx,dc), null);
+    if(v!=null) t+=v;
+  }
+  return t;
+}
 
 // ═════════════════════════ RANGO / CONFIG ═════════════════════════
 function onRange(){
@@ -1086,6 +1104,23 @@ function renderDiag(){
 
   for(const w of (S.labelWarnings||[]))
     items.push({cls:"warn", msg:`Índice etiquetas: ${esc(w)}`});
+
+  // etiquetas duplicadas cuya hoja ganadora está en 0/— pero otra hoja sí tiene datos:
+  // evita que una fila vacía (p.ej. en METROSCUB) eclipse los datos reales de otra hoja
+  const usedLabels=new Set();
+  for(const sid of Object.keys(STREAM_METRO)){ const m=getMeta(sid); if(m) m.labels.forEach(l=>usedLabels.add(norm(l))); }
+  EQUIPOS_RECUP.forEach(eq=>{ usedLabels.add(norm(eq.perm)); if(eq.rech) usedLabels.add(norm(eq.rech)); });
+  for(const k of usedLabels){
+    const alts=(S.labelAlts||{})[k]; if(!alts || !alts.length) continue;
+    const win=S.labelIndex[k]; if(!win) continue;
+    const wSum=sumHit(win);
+    if(wSum!=null && wSum>0) continue;
+    const conDatos=alts.map(a=>({a,s:sumHit(a)})).filter(x=>x.s>0);
+    if(conDatos.length){
+      const det=conDatos.map(x=>`"${esc(x.a.sheet)}" (${fmt(x.s)} m³)`).join(", ");
+      items.push({cls:"warn", msg:`Etiqueta "${esc(k)}": la hoja usada (${esc(win.sheet)}) suma ${wSum==null?"—":"0"} en el rango, pero hay otras coincidencias con datos: ${det}. Revisa cuál es la fuente correcta.`});
+    }
+  }
 
   for(const w of (S.totResets||[]))
     items.push({cls:"warn", msg:esc(w)});
