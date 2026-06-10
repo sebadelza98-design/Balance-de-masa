@@ -159,6 +159,15 @@ select,input[type=number],input[type=text]{background:var(--bg);color:var(--txt)
     </div>
   </div>
 
+  <div class="card" id="srcCard" style="display:none">
+    <div class="card-title">🔀 Fuentes de etiquetas duplicadas</div>
+    <p class="cap" style="margin-bottom:10px">Estas etiquetas del modelo aparecen en más de una hoja/posición del archivo. Elige cuál usar — el monto entre paréntesis es la suma de cada fuente en el rango actual. Tu elección se guarda en este navegador.</p>
+    <table>
+      <thead><tr><th>Etiqueta</th><th>Fuente usada</th></tr></thead>
+      <tbody id="srcTbody"></tbody>
+    </table>
+  </div>
+
   <div class="card" id="flowsCard" style="display:none">
     <div class="card-title">Caudales leídos (m³ · período)</div>
     <table>
@@ -263,7 +272,17 @@ const S = {
     prodMeter: "M³ Bebida",   // medidor de salida de Producción
     roProd:    "si",          // Permeado RO Grande/Pequeña como entrada extra a Producción
     lb02Label: "Total LB02",  // etiqueta del total LB-02 para el KPI de planta
-    lb03Label: "Agua servicio"// etiqueta del total LB-03 para el KPI de planta
+    lb03Label: "Agua servicio",// etiqueta del total LB-03 para el KPI de planta
+    // Fuente preferida cuando una etiqueta aparece en varias hojas/posiciones
+    // (clave = etiqueta normalizada). Editable en "Fuentes de etiquetas
+    // duplicadas". Si la posición no existe en el archivo cargado (p.ej. cambió
+    // el layout en otro mes), se vuelve a la primera ocurrencia y el
+    // Diagnóstico lo avisa. Por defecto los permeados RO se leen de la hoja
+    // "Permeado- Servicio- Azucar" (RO Pequeña: tabla apilada 2, col CM).
+    labelSources: {
+      "permeado ro pequeña": { sheet:"Permeado- Servicio- Azucar · tabla 2", idx:90 },
+      "permeado ro grande":  { sheet:"Permeado- Servicio- Azucar", idx:93 }
+    }
   }
 };
 
@@ -402,6 +421,7 @@ function fmt(v,d=0){ return v==null?"—":v.toLocaleString("es-CL",{maximumFract
 function fmtPct(v){ return v==null?"—":v.toFixed(1)+" %"; }
 function dnum(d){ return d instanceof Date ? d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate() : null; }
 function esc(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function colName(i){ let s=""; i++; while(i>0){ s=String.fromCharCode(65+(i-1)%26)+s; i=Math.floor((i-1)/26); } return s; }
 
 function showError(msg){ const el=document.getElementById("errBox"); el.innerHTML="⚠️ "+msg; el.style.display=""; }
 function hideError(){ document.getElementById("errBox").style.display="none"; }
@@ -492,22 +512,26 @@ function cellDate(ws,r,c,val){
 function dlabel(d,fallback){ return d ? d.toLocaleDateString("es-CL",{day:"2-digit",month:"2-digit"}) : String(fallback); }
 
 // Agrupa las celdas-fecha en corridas contiguas (tolerando huecos pequeños por
-// celdas vacías o combinadas) y se queda con la corrida más larga: un hueco no
-// trunca el calendario, pero una segunda tabla de fechas lejana en la misma
-// fila/columna (p.ej. un bloque resumen a la derecha) no contamina el rango
-// ni duplica las sumas.
+// celdas vacías o combinadas). El calendario principal es la corrida más larga:
+// un hueco no trunca el calendario y una segunda tabla de fechas en la misma
+// fila/columna no contamina el rango ni duplica las sumas. En hojas verticales,
+// las corridas restantes (tablas apiladas) quedan disponibles como hojas
+// virtuales para usarlas como fuente alternativa de etiquetas.
 const DATE_GAP = 2;   // huecos (celdas no-fecha) tolerados dentro del calendario
-function longestDateRun(cells){
-  if(!cells.length) return { run:[], ignored:0 };
+function splitDateRuns(cells){
+  if(!cells.length) return [];
   const runs=[]; let cur=[cells[0]];
   for(let i=1;i<cells.length;i++){
     if(cells[i].key - cells[i-1].key - 1 <= DATE_GAP) cur.push(cells[i]);
     else { runs.push(cur); cur=[cells[i]]; }
   }
   runs.push(cur);
-  let best=runs[0];
+  return runs;
+}
+function mainRun(runs){
+  let best=runs[0]||[];
   for(const r of runs) if(r.length>best.length) best=r;
-  return { run:best, ignored:cells.length-best.length };
+  return best;
 }
 
 function detectAxis(ws, grid){
@@ -534,8 +558,8 @@ function detectAxis(ws, grid){
     for(let c=0; c<row.length; c++){
       if(isDateCell(ws,hRow,c,row[c])){ const d=cellDate(ws,hRow,c,row[c]); all.push({key:c,date:d,label:dlabel(d,c)}); }
     }
-    const {run,ignored}=longestDateRun(all);
-    return { axis:"h", dateCols:run, headerRow:hRow, ignoredDates:ignored };
+    const runs=splitDateRuns(all), run=mainRun(runs);
+    return { axis:"h", dateCols:run, headerRow:hRow, ignoredDates:all.length-run.length, extraRuns:[] };
   }
   if(vCnt>=3){
     const all=[];
@@ -543,7 +567,15 @@ function detectAxis(ws, grid){
       const v=(grid[r]||[])[vCol];
       if(isDateCell(ws,r,vCol,v)){ const d=cellDate(ws,r,vCol,v); all.push({key:r,date:d,label:dlabel(d,r)}); }
     }
-    const {run,ignored}=longestDateRun(all);
+    const runs=splitDateRuns(all), run=mainRun(runs);
+    // tablas apiladas: corridas con ≥3 fechas distintas a la principal se exponen
+    // como hojas virtuales; su zona de etiquetas son las filas entre tablas
+    const extraRuns=[]; let ign=0;
+    for(let i=0;i<runs.length;i++){
+      const r=runs[i]; if(r===run) continue;
+      if(r.length>=3) extraRuns.push({ dateCols:r, labelFrom: i>0?runs[i-1][runs[i-1].length-1].key+1:0, labelTo: r[0].key });
+      else ign+=r.length;
+    }
     const firstRow=run.length?run[0].key:-1;
     // fila de encabezados = fila con más strings antes del primer dato
     let hr=0, hsc=-1;
@@ -552,9 +584,9 @@ function detectAxis(ws, grid){
       for(let c=0; c<row.length; c++) if(typeof row[c]==="string" && row[c].trim()) cnt++;
       if(cnt>hsc){ hsc=cnt; hr=r; }
     }
-    return { axis:"v", dateCols:run, headerRow:hr, ignoredDates:ignored };
+    return { axis:"v", dateCols:run, headerRow:hr, ignoredDates:ign, extraRuns };
   }
-  return { axis:null, dateCols:[], headerRow:-1, ignoredDates:0 };
+  return { axis:null, dateCols:[], headerRow:-1, ignoredDates:0, extraRuns:[] };
 }
 
 function buildLabelIndex(){
@@ -576,9 +608,14 @@ function buildLabelIndex(){
   for(const name of S.sheetOrder){
     const sh = S.sheets[name];
     if(sh.axis==="v"){
-      // Indexar TODAS las filas anteriores al primer dato; rellenar celdas combinadas
+      // Zonas de encabezado a indexar: la propia (filas previas al primer dato, o
+      // entre tablas para hojas virtuales) y, si la tabla apilada hereda los
+      // encabezados, también la zona de la tabla principal. Rellena combinadas.
       const firstData = sh.dateCols.length ? sh.dateCols[0].key : sh.grid.length;
-      for(let r=0; r<firstData; r++){
+      const zones=[[ sh.labelFrom!=null?sh.labelFrom:0, sh.labelTo!=null?sh.labelTo:firstData ]];
+      if(sh.parentLabelTo) zones.push([0, sh.parentLabelTo]);
+      for(const [zFrom,zTo] of zones)
+      for(let r=zFrom; r<zTo; r++){
         const row = sh.grid[r]||[];
         let last = null;
         for(let c=0; c<row.length; c++){
@@ -630,6 +667,16 @@ function onExcel(evt){
         const meta = detectAxis(ws, grid);
         S.sheets[name] = { grid, ...meta };
         S.sheetOrder.push(name);
+        // tablas apiladas (hojas verticales) como hojas virtuales: mismo grid,
+        // calendario propio; heredan los encabezados de la tabla principal
+        (meta.extraRuns||[]).forEach((er,i)=>{
+          const vname=`${name} · tabla ${i+2}`;
+          S.sheets[vname]={ grid, axis:meta.axis, dateCols:er.dateCols, headerRow:-1,
+            ignoredDates:0, extraRuns:[], virtual:true,
+            labelFrom:er.labelFrom, labelTo:er.labelTo,
+            parentLabelTo: meta.dateCols.length?meta.dateCols[0].key:0 };
+          S.sheetOrder.push(vname);
+        });
       }
 
       // primaria: METROSCUB con fechas, si no la de más fechas
@@ -664,11 +711,25 @@ function onExcel(evt){
 }
 
 // ═════════════════════════ LECTURA POR ETIQUETA ═════════════════════════
+// Ocurrencia efectiva de una etiqueta: la elegida por el usuario en "Fuentes de
+// etiquetas duplicadas" si existe en el archivo cargado; si no, la primera
+// ocurrencia indexada.
+function labelHit(lab){
+  const k=norm(lab);
+  const ov=(S.config.labelSources||{})[k];
+  if(ov){
+    const occ=[S.labelIndex[k], ...((S.labelAlts||{})[k]||[])].filter(Boolean);
+    const hit=occ.find(o=>o.sheet===ov.sheet && o.idx===ov.idx);
+    if(hit) return hit;
+  }
+  return S.labelIndex[k];
+}
+
 function sumLabels(labels){
   let total=0, found=false;
   const s=dnum(S.rangeDates.start), e=dnum(S.rangeDates.end);
   for(const lab of labels){
-    const hit=S.labelIndex[norm(lab)]; if(!hit) continue;
+    const hit=labelHit(lab); if(!hit) continue;
     const sh=S.sheets[hit.sheet]; if(!sh.dateCols.length) continue;
     found=true;
     const track=dqTrack(lab);
@@ -685,7 +746,7 @@ function diffLabels(labels){  // totalizador: suma de incrementos diarios (resis
   let result=null, found=false;
   const s=dnum(S.rangeDates.start), e=dnum(S.rangeDates.end);
   for(const lab of labels){
-    const hit=S.labelIndex[norm(lab)]; if(!hit) continue;
+    const hit=labelHit(lab); if(!hit) continue;
     const sh=S.sheets[hit.sheet]; if(!sh.dateCols.length) continue;
     found=true;
     const track=dqTrack(lab);
@@ -761,7 +822,37 @@ function applyRange(){
   for(const sid of Object.keys(STREAM_METRO)) S.flows[sid]=readStream(sid);
   S.crossProd=sumLabels(["TK-7200","TK-200"]);  // validación cruzada del producto
 
+  renderLabelSources();
   renderFlows(); renderBalance(); renderRecup(); renderNano(); renderLosses(); renderDiag();
+}
+
+// Etiquetas del modelo con más de una ocurrencia en el archivo: selector de fuente.
+function usedModelLabels(){
+  const used=new Set();
+  for(const sid of Object.keys(STREAM_METRO)){ const m=getMeta(sid); if(m) m.labels.forEach(l=>used.add(norm(l))); }
+  EQUIPOS_RECUP.forEach(eq=>{ used.add(norm(eq.perm)); if(eq.rech) used.add(norm(eq.rech)); });
+  return used;
+}
+function renderLabelSources(){
+  const card=document.getElementById("srcCard"), tb=document.getElementById("srcTbody");
+  const rows=[];
+  S._srcOcc={};
+  for(const k of [...usedModelLabels()].sort()){
+    const alts=(S.labelAlts||{})[k]; if(!alts || !alts.length) continue;
+    const occ=[S.labelIndex[k], ...alts].filter(Boolean);
+    S._srcOcc[k]=occ;
+    const eff=labelHit(k);
+    const opts=occ.map((o,i)=>{
+      const sh=S.sheets[o.sheet];
+      const pos=sh && sh.axis==="v" ? "col "+colName(o.idx) : "fila "+(o.idx+1);
+      const sum=sumHit(o);
+      const sel=(eff && o.sheet===eff.sheet && o.idx===eff.idx)?" selected":"";
+      return `<option value="${i}"${sel}>${esc(o.sheet)} · ${pos} (${sum==null?"—":fmt(sum)} m³)</option>`;
+    }).join("");
+    rows.push(`<tr><td>${esc(k)}</td><td><select data-srclabel="${esc(k)}">${opts}</select></td></tr>`);
+  }
+  if(rows.length){ tb.innerHTML=rows.join(""); card.style.display=""; }
+  else { tb.innerHTML=""; card.style.display="none"; }
 }
 
 // ═════════════════════════ INFERENCIA / ACCESO ═════════════════════════
@@ -955,7 +1046,7 @@ function dailyStream(sid){
   const m=getMeta(sid); if(!m) return map;
   const s=dnum(S.rangeDates.start), e=dnum(S.rangeDates.end);
   for(const lab of m.labels){
-    const hit=S.labelIndex[norm(lab)]; if(!hit) continue;
+    const hit=labelHit(lab); if(!hit) continue;
     const sh=S.sheets[hit.sheet]; if(!sh.dateCols.length) continue;
     const track=dqTrack(lab);
     for(const dc of sh.dateCols){
@@ -1098,27 +1189,26 @@ function renderDiag(){
   items.push({cls:"info", msg:`Hojas: ${S.sheetOrder.map(n=>esc(n)+" ["+(S.sheets[n].axis||"?")+"]").join(", ")} · calendario: ${esc(S.primary)}`});
 
   for(const name of S.sheetOrder){
-    const ig=S.sheets[name].ignoredDates;
-    if(ig) items.push({cls:"info", msg:`Hoja "${esc(name)}": ${ig} celda(s) de fecha fuera del calendario principal fueron ignoradas (tabla secundaria/resumen) para no duplicar sumas.`});
+    const sh=S.sheets[name];
+    if(sh.virtual){ items.push({cls:"info", msg:`Hoja "${esc(name)}": tabla apilada detectada (${sh.dateCols.length} fechas); disponible como fuente en «Fuentes de etiquetas duplicadas».`}); continue; }
+    if(sh.ignoredDates) items.push({cls:"info", msg:`Hoja "${esc(name)}": ${sh.ignoredDates} celda(s) de fecha fuera del calendario principal fueron ignoradas (tabla secundaria/resumen) para no duplicar sumas.`});
   }
 
   for(const w of (S.labelWarnings||[]))
     items.push({cls:"warn", msg:`Índice etiquetas: ${esc(w)}`});
 
-  // etiquetas duplicadas cuya hoja ganadora está en 0/— pero otra hoja sí tiene datos:
-  // evita que una fila vacía (p.ej. en METROSCUB) eclipse los datos reales de otra hoja
-  const usedLabels=new Set();
-  for(const sid of Object.keys(STREAM_METRO)){ const m=getMeta(sid); if(m) m.labels.forEach(l=>usedLabels.add(norm(l))); }
-  EQUIPOS_RECUP.forEach(eq=>{ usedLabels.add(norm(eq.perm)); if(eq.rech) usedLabels.add(norm(eq.rech)); });
-  for(const k of usedLabels){
+  // etiquetas duplicadas cuya fuente usada está en 0/— pero otra ocurrencia sí
+  // tiene datos: evita que una fila vacía eclipse los datos reales de otra hoja
+  for(const k of usedModelLabels()){
     const alts=(S.labelAlts||{})[k]; if(!alts || !alts.length) continue;
-    const win=S.labelIndex[k]; if(!win) continue;
-    const wSum=sumHit(win);
+    const eff=labelHit(k); if(!eff) continue;
+    const wSum=sumHit(eff);
     if(wSum!=null && wSum>0) continue;
-    const conDatos=alts.map(a=>({a,s:sumHit(a)})).filter(x=>x.s>0);
+    const otras=[S.labelIndex[k], ...alts].filter(o=>o && !(o.sheet===eff.sheet && o.idx===eff.idx));
+    const conDatos=otras.map(a=>({a,s:sumHit(a)})).filter(x=>x.s>0);
     if(conDatos.length){
       const det=conDatos.map(x=>`"${esc(x.a.sheet)}" (${fmt(x.s)} m³)`).join(", ");
-      items.push({cls:"warn", msg:`Etiqueta "${esc(k)}": la hoja usada (${esc(win.sheet)}) suma ${wSum==null?"—":"0"} en el rango, pero hay otras coincidencias con datos: ${det}. Revisa cuál es la fuente correcta.`});
+      items.push({cls:"warn", msg:`Etiqueta "${esc(k)}": la fuente usada (${esc(eff.sheet)}) suma ${wSum==null?"—":"0"} en el rango, pero hay otras coincidencias con datos: ${det}. Elige la fuente en Datos → «Fuentes de etiquetas duplicadas».`});
     }
   }
 
@@ -1182,6 +1272,17 @@ document.getElementById("dateFrom").addEventListener("change", onRange);
 document.getElementById("dateTo").addEventListener("change", onRange);
 ["cfgWurDest","cfgWur1Tank","cfgProdMeter","cfgRoProd"].forEach(id=>document.getElementById(id).addEventListener("change", onConfig));
 ["cfgLb02","cfgLb03"].forEach(id=>document.getElementById(id).addEventListener("input", onConfig));
+document.getElementById("srcTbody").addEventListener("change", e=>{
+  const k=e.target.dataset.srclabel; if(!k) return;
+  const occ=(S._srcOcc||{})[k]||[];
+  const o=occ[+e.target.value]; if(!o) return;
+  if(!S.config.labelSources) S.config.labelSources={};
+  const def=S.labelIndex[k];
+  if(def && o.sheet===def.sheet && o.idx===def.idx) delete S.config.labelSources[k];
+  else S.config.labelSources[k]={sheet:o.sheet, idx:o.idx};
+  saveLocal();
+  applyRange();
+});
 document.getElementById("tankTbody").addEventListener("input", e=>{
   const inp=e.target, tid=inp.dataset.tank, f=inp.dataset.field;
   if(!tid || !f || !S.tanks[tid]) return;
