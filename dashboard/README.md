@@ -19,6 +19,16 @@ npm run build      # build de producción → dist/
 npm run preview    # sirve el build localmente
 ```
 
+### Versión standalone (un solo archivo HTML)
+
+¿Sin Node/npm en el equipo de destino? `npm run build:standalone` genera
+**`../dashboard.html`**: el mismo dashboard en un único archivo
+autocontenido (Chart.js embebido) que se abre con doble clic, sin internet
+ni servidor. Sus fuentes viven en `standalone/` (plantilla + CSS + JS).
+La versión React de `src/` sigue siendo la recomendada para crecer
+(conexión Excel, nuevos módulos); la standalone es ideal para compartir
+o desplegar en equipos restringidos.
+
 ## 🗺️ Páginas
 
 | Ruta            | Página          | Contenido |

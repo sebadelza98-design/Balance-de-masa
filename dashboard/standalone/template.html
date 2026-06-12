@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="Dashboard de monitoreo operacional y consumo de agua de planta industrial — archivo único autocontenido" />
+<title>AquaPlant · Monitoreo Planta de Agua</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%2322d3ee' d='M12 2C7.5 8.5 5 12.3 5 15a7 7 0 0 0 14 0c0-2.7-2.5-6.5-7-13z'/%3E%3C/svg%3E" />
+<!--
+  ════════════════════════════════════════════════════════════════════
+  AquaPlant · Dashboard de Monitoreo de Planta de Agua (standalone)
+  ════════════════════════════════════════════════════════════════════
+  Archivo ÚNICO y AUTOCONTENIDO: ábrelo con doble clic en cualquier
+  navegador moderno. No requiere internet, npm ni servidor (Chart.js
+  va embebido más abajo).
+
+  · Datos: simulados (mock) deterministas, para validar diseño y
+    navegación. La función getDailyRecords() es el único punto a
+    reemplazar para conectar los Excel mensuales reales.
+  · Versión mantenible/escalable del mismo dashboard: carpeta
+    dashboard/ del repositorio (React + Vite + Recharts).
+
+  Generado desde dashboard/standalone/ con:
+      npm run build:standalone
+  ════════════════════════════════════════════════════════════════════
+-->
+<style>
+/*__CSS__*/
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div id="backdrop" class="sidebar-backdrop"></div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo">💧</div>
+      <div>
+        <div class="name">AquaPlant</div>
+        <div class="tag">Monitoreo hídrico</div>
+      </div>
+    </div>
+    <nav id="sidebar-nav" class="sidebar-nav"></nav>
+    <div class="sidebar-foot">Planta embotelladora<br />Balance hídrico operacional · v1.0</div>
+  </aside>
+
+  <div class="app-main">
+    <header class="app-header">
+      <button id="burger" class="header-burger" aria-label="Abrir menú">☰</button>
+      <div class="header-title">
+        Monitoreo Planta de Agua
+        <small>Fuente de datos: simulada (mock) · archivo único</small>
+      </div>
+      <div class="filters">
+        <div class="filter-field">
+          <label for="f-start">Fecha inicial</label>
+          <input id="f-start" type="date" />
+        </div>
+        <div class="filter-field">
+          <label for="f-end">Fecha final</label>
+          <input id="f-end" type="date" />
+        </div>
+        <div class="filter-field">
+          <label for="f-month">Mes</label>
+          <select id="f-month"></select>
+        </div>
+        <div class="filter-field">
+          <label for="f-year">Año</label>
+          <select id="f-year"></select>
+        </div>
+        <div class="last-update" title="Última actualización de datos">
+          <span class="pulse-dot"></span>
+          <span>Actualizado<br /><strong id="last-update">—</strong></span>
+        </div>
+      </div>
+    </header>
+
+    <main id="page-root" class="page"></main>
+  </div>
+</div>
+
+<!-- Chart.js v4 (UMD) embebido para funcionar sin conexión -->
+<script>
+/*__CHARTJS__*/
+</script>
+
+<!-- Aplicación -->
+<script>
+/*__APP__*/
+</script>
+</body>
+</html>
