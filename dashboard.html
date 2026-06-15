@@ -220,6 +220,20 @@ input, select { font: inherit; }
 }
 .filter-field input:focus, .filter-field select:focus { border-color: var(--accent); }
 .filter-field input[type='date']::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
+.excel-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.excel-btn:hover { border-color: var(--accent); color: var(--accent); }
+.excel-name { font-size: 11px; color: var(--text-faint); max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .last-update {
   display: flex;
   align-items: center;
@@ -332,10 +346,6 @@ input, select { font: inherit; }
   gap: 12px;
   box-shadow: var(--shadow);
   min-width: 0;
-}
-.chart-card.primary {
-  border-color: rgba(34, 211, 238, 0.4);
-  box-shadow: var(--shadow), inset 0 2px 0 0 var(--accent);
 }
 .chart-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .chart-card-title { font-size: 14px; font-weight: 600; }
@@ -474,6 +484,12 @@ input, select { font: inherit; }
         <div class="filter-field">
           <label for="f-year">Año</label>
           <select id="f-year"></select>
+        </div>
+        <div class="filter-field">
+          <label>Datos</label>
+          <button type="button" id="btn-excel" class="excel-btn" title="Cargar archivo Excel">📂 Cargar Excel</button>
+          <input id="f-excel" type="file" accept=".xlsx,.xls,.csv" hidden />
+          <span id="excel-name" class="excel-name"></span>
         </div>
         <div class="last-update" title="Última actualización de datos">
           <span class="pulse-dot"></span>
@@ -631,26 +647,6 @@ const KPI_DEFS = {
 const LINE_RATIO = { direction: 'below', ok: 1.9, warn: 2.4 };
 const POTABLE_EF = { direction: 'above', ok: 92, warn: 86 };
 const ELAB_RATIO = { direction: 'below', ok: 1.45, warn: 1.7 };
-
-/* Indicadores por área para la tabla «Estado de Indicadores» (BP/Real/Gap).
-   BP = presupuesto de consumo de agua. Se define como un plan diario fijo
-   (m³/día) por área; el BP del período = plan diario × nº de días del rango
-   seleccionado. «Planta» es el total y «Otros» el residual no asignado, de
-   modo que las áreas + Otros suman exactamente el total de Planta. */
-const AREA_BP_DIARIO = {
-  planta: 7090, retornable: 3700, oneWay: 720, linea10: 650,
-  servicios: 560, potable: 410, elaboracion: 900, otros: 150,
-};
-const INDICADORES = [
-  { id: 'planta',      nombre: 'Planta',       color: '#22d3ee', total: true },
-  { id: 'retornable',  nombre: 'Retornable',   color: '#3b82f6' },
-  { id: 'oneWay',      nombre: 'One Way',       color: PALETTE[6] },
-  { id: 'linea10',     nombre: 'Línea 10',      color: PALETTE[7] },
-  { id: 'servicios',   nombre: 'Servicios',     color: '#facc15' },
-  { id: 'potable',     nombre: 'Agua Potable',  color: '#2dd4bf' },
-  { id: 'otros',       nombre: 'Otros',         color: '#94a3b8' },
-  { id: 'elaboracion', nombre: 'Elaboración',   color: '#e879f9' },
-];
 
 function evalStatus(value, def) {
   if (value === null || value === undefined || Number.isNaN(value)) return null;
@@ -868,31 +864,6 @@ function elabKpis(records) {
   const produccion = sum(records.map((r) => r.elaboracion.produccion));
   return { agua, produccion, ratio: safeDiv(agua, produccion) };
 }
-/* Consumo real de agua (m³) por indicador/área en el período. «Planta» es la
-   captación total de pozos y «Otros» el residual no asignado a las demás áreas. */
-function indicatorReals(records) {
-  const retornable = sum(records.map((r) => sum(LINEAS_RETORNABLES.map((l) => r.lineas[l.id]?.agua ?? 0))));
-  const oneWay = sum(records.map((r) => r.lineas.oneWay?.agua ?? 0));
-  const linea10 = sum(records.map((r) => r.lineas.linea10?.agua ?? 0));
-  const servicios = sum(records.map(totalServicios));
-  const potable = sum(records.map((r) => r.aguaPotable.consumo));
-  const elaboracion = sum(records.map((r) => r.elaboracion.agua));
-  const planta = sum(records.map(totalPozos));
-  const otros = Math.max(0, planta - (retornable + oneWay + linea10 + servicios + potable + elaboracion));
-  return { planta, retornable, oneWay, linea10, servicios, potable, elaboracion, otros };
-}
-/* Filas de la tabla «Estado de Indicadores»: BP, Real y Gap por área. */
-function indicatorStatusRows(records) {
-  const real = indicatorReals(records);
-  const dias = records.length;
-  return INDICADORES.map((ind) => {
-    const bp = (AREA_BP_DIARIO[ind.id] ?? 0) * dias;
-    const valReal = real[ind.id] ?? 0;
-    const gap = valReal - bp;
-    const gapPct = bp > 0 ? (gap / bp) * 100 : null;
-    return { ...ind, bp, real: valReal, gap, gapPct, tone: gap <= 0 ? 'good' : 'bad' };
-  });
-}
 
 /* ════════════════ 7. Estado global y datos del período ════════════ */
 const state = {
@@ -1016,8 +987,8 @@ function kpiCard({ label, value, unit, decimals = 0, accent = '#22d3ee', status 
     <div class="kpi-foot">${deltaBadge(delta, tone)}<span class="kpi-target">${subtitle}</span></div>
   </div>`;
 }
-function chartCard({ span = 12, title, subtitle = '', canvasId, height = 300, actions = '', body = '', cls = '' }) {
-  return `<div class="chart-card span-${span}${cls ? ' ' + cls : ''}">
+function chartCard({ span = 12, title, subtitle = '', canvasId, height = 300, actions = '', body = '' }) {
+  return `<div class="chart-card span-${span}">
     <div class="chart-card-head">
       <div><div class="chart-card-title">${title}</div>${subtitle ? `<div class="chart-card-subtitle">${subtitle}</div>` : ''}</div>
       ${(actions || canvasId) ? `<div class="chart-card-actions">${actions}${canvasId ? `<button type="button" class="chart-dl" data-canvas="${canvasId}" title="Descargar gráfico (PNG)" aria-label="Descargar gráfico">⬇</button>` : ''}</div>` : ''}
@@ -1066,34 +1037,6 @@ function renderTable(containerId, columns, rows, sortKey, sortDir = 'desc') {
   );
 }
 
-/* Brecha (Gap) Real vs BP: ▼ verde = bajo presupuesto, ▲ rojo = sobre presupuesto. */
-function gapBadge(pct, tone) {
-  if (pct === null || pct === undefined || Number.isNaN(pct)) {
-    return '<span class="delta neutral">—</span>';
-  }
-  const arrow = pct > 0.05 ? '▲' : pct < -0.05 ? '▼' : '●';
-  return `<span class="delta ${tone}" title="Gap vs presupuesto (BP)">${arrow} ${fmtPct(Math.abs(pct), 1)}</span>`;
-}
-
-/* Tarjeta principal «Estado de Indicadores» (BP / Real / Gap por área). */
-function indicatorStatusCard() {
-  return chartCard({
-    span: 12,
-    cls: 'primary',
-    title: 'Estado de Indicadores',
-    subtitle: 'Consumo de agua del período · BP (presupuesto), Real y brecha (Gap)',
-    body: '<div id="tbl-indicadores"></div>',
-  });
-}
-function renderIndicatorStatus() {
-  renderTable('tbl-indicadores', [
-    { key: 'nombre', label: 'Indicador', html: (r) => `<span class="row-label"><span class="row-swatch" style="background:${r.color}"></span>${r.total ? `<strong>${r.nombre}</strong>` : r.nombre}</span>` },
-    { key: 'bp', label: 'BP (m³)', num: true, html: (r) => fmt(r.bp, 0) },
-    { key: 'real', label: 'Real (m³)', num: true, html: (r) => fmt(r.real, 0) },
-    { key: 'gap', label: 'Gap (m³)', num: true, html: (r) => `${r.gap > 0 ? '+' : ''}${fmt(r.gap, 0)} ${gapBadge(r.gapPct, r.tone)}` },
-  ], indicatorStatusRows(RECS), null);
-}
-
 /* ════════════════ 10. Páginas ════════════════ */
 const dayLabels = () => RECS.map((r) => fmtDayShort(r.date));
 
@@ -1121,7 +1064,6 @@ function renderPlanta(root) {
 
   root.innerHTML = `
     ${pageHeader('Planta General', 'Balance hídrico global: captación, tratamiento, producción y servicios')}
-    ${indicatorStatusCard()}
     <div class="kpi-grid">${cards}</div>
     <div class="chart-grid">
       ${chartCard({ span: 7, title: 'Tendencia diaria del indicador', subtitle: 'Comportamiento día a día dentro del período', canvasId: 'ch-trend', actions: `<select id="sel-kpi">${kpiOptions}</select>` })}
@@ -1129,7 +1071,7 @@ function renderPlanta(root) {
       ${chartCard({ span: 7, title: 'Evolución mensual acumulada', subtitle: 'Últimos 12 meses · pozos vs bebida producida', canvasId: 'ch-monthly' })}
       ${chartCard({ span: 5, title: 'Distribución del consumo', subtitle: 'Participación por consumidor en el período', canvasId: 'ch-donut' })}
       ${chartCard({ span: 6, title: 'Ranking de consumidores de agua', subtitle: 'Principales consumidores del período (m³)', canvasId: 'ch-rank', height: 340 })}
-      ${chartCard({ span: 6, title: 'Semáforo de desempeño', subtitle: 'Indicadores de planta vs metas y período anterior', body: '<div id="tbl-status"></div>' })}
+      ${chartCard({ span: 6, title: 'Estado de indicadores', subtitle: 'Semáforo de desempeño vs metas y período anterior', body: '<div id="tbl-status"></div>' })}
     </div>`;
 
   /* Tendencia diaria con selector */
@@ -1241,7 +1183,6 @@ function renderRetornable(root) {
 
   root.innerHTML = `
     ${pageHeader('Líneas Retornables', 'Líneas 1 · 2 · 3 · 4 · 5 · 11 — lavado y envasado retornable')}
-    ${indicatorStatusCard()}
     <div class="kpi-grid">
       ${kpiCard({ label: 'Consumo de agua', value: agua, unit: 'm³', accent: '#3b82f6', delta: dAgua, tone: evalDelta(dAgua, { deltaGood: 'down' }) })}
       ${kpiCard({ label: 'Bebida producida', value: prod, unit: 'm³', accent: '#4ade80', delta: dProd, tone: evalDelta(dProd, { deltaGood: 'up' }) })}
@@ -1327,7 +1268,6 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
 
   root.innerHTML = `
     ${pageHeader(title, subtitle)}
-    ${indicatorStatusCard()}
     <div class="kpi-grid">
       ${kpiCard({ label: 'Consumo de agua', value: k.agua, unit: 'm³', accent: '#3b82f6', delta: dAgua, tone: evalDelta(dAgua, { deltaGood: 'down' }) })}
       ${kpiCard({ label: 'Bebida producida', value: k.produccion, unit: 'm³', accent: '#4ade80', delta: dProd, tone: evalDelta(dProd, { deltaGood: 'up' }) })}
@@ -1417,7 +1357,6 @@ function renderServicios(root) {
 
   root.innerHTML = `
     ${pageHeader('Servicios Auxiliares', 'Torres de enfriamiento, calderas, CIP y otros servicios de planta')}
-    ${indicatorStatusCard()}
     <div class="kpi-grid">
       ${kpiCard({ label: 'Consumo total servicios', value: total, unit: 'm³', accent: '#22d3ee', delta: dTotal, tone: evalDelta(dTotal, { deltaGood: 'down' }) })}
       ${kpiCards}
@@ -1485,7 +1424,6 @@ function renderPotable(root) {
 
   root.innerHTML = `
     ${pageHeader('Agua Potable', 'Producción, consumo, pérdidas y eficiencia del sistema de agua potable')}
-    ${indicatorStatusCard()}
     <div class="kpi-grid">
       ${kpiCard({ label: 'Producción', value: k.produccion, unit: 'm³', accent: '#22d3ee', delta: dP, tone: evalDelta(dP, {}) })}
       ${kpiCard({ label: 'Consumo', value: k.consumo, unit: 'm³', accent: '#3b82f6', delta: dC, tone: evalDelta(dC, { deltaGood: 'down' }) })}
@@ -1553,7 +1491,6 @@ function renderElaboracion(root) {
 
   root.innerHTML = `
     ${pageHeader('Elaboración', 'Preparación de jarabes y mezclas — consumo de agua y producción')}
-    ${indicatorStatusCard()}
     <div class="kpi-grid">
       ${kpiCard({ label: 'Consumo de agua', value: k.agua, unit: 'm³', accent: '#3b82f6', delta: dA, tone: evalDelta(dA, { deltaGood: 'down' }) })}
       ${kpiCard({ label: 'Producto elaborado', value: k.produccion, unit: 'm³', accent: '#4ade80', delta: dP, tone: evalDelta(dP, { deltaGood: 'up' }) })}
@@ -1664,7 +1601,6 @@ function renderPage() {
   destroyCharts();
   const root = document.getElementById('page-root');
   PAGES[state.page].render(root);
-  if (document.getElementById('tbl-indicadores')) renderIndicatorStatus();
   window.scrollTo({ top: 0 });
 }
 
@@ -1747,6 +1683,18 @@ function downloadChart(canvasId) {
 document.getElementById('page-root').addEventListener('click', (e) => {
   const btn = e.target.closest('.chart-dl');
   if (btn) downloadChart(btn.dataset.canvas);
+});
+
+/* Opción para cargar Excel. La lectura y el mapeo del contenido se definirán
+   más adelante; por ahora solo se habilita la selección del archivo. */
+const excelInput = document.getElementById('f-excel');
+document.getElementById('btn-excel').addEventListener('click', () => excelInput.click());
+excelInput.addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const lbl = document.getElementById('excel-name');
+  if (lbl) lbl.textContent = file.name;
+  // TODO: definir qué columnas leer del Excel y conectarlas con getDailyRecords().
 });
 
 /* ════════════════ 12. Inicio ════════════════ */
