@@ -340,6 +340,7 @@ input, select { font: inherit; }
 .chart-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .chart-card-title { font-size: 14px; font-weight: 600; }
 .chart-card-subtitle { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
+.chart-card-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .chart-card-actions select {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -350,6 +351,21 @@ input, select { font: inherit; }
   outline: none;
   max-width: 280px;
 }
+.chart-card-actions .chart-dl {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius-sm);
+  width: 30px;
+  height: 30px;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.chart-card-actions .chart-dl:hover { background: var(--surface-hover); color: var(--accent); border-color: rgba(34, 211, 238, 0.4); }
 .chart-body { position: relative; width: 100%; min-width: 0; }
 .chart-body canvas { width: 100% !important; }
 
@@ -1004,7 +1020,7 @@ function chartCard({ span = 12, title, subtitle = '', canvasId, height = 300, ac
   return `<div class="chart-card span-${span}${cls ? ' ' + cls : ''}">
     <div class="chart-card-head">
       <div><div class="chart-card-title">${title}</div>${subtitle ? `<div class="chart-card-subtitle">${subtitle}</div>` : ''}</div>
-      ${actions ? `<div class="chart-card-actions">${actions}</div>` : ''}
+      ${(actions || canvasId) ? `<div class="chart-card-actions">${actions}${canvasId ? `<button type="button" class="chart-dl" data-canvas="${canvasId}" title="Descargar gráfico (PNG)" aria-label="Descargar gráfico">⬇</button>` : ''}</div>` : ''}
     </div>
     <div class="chart-body" ${canvasId ? `style="height:${height}px"` : ''}>${canvasId ? `<canvas id="${canvasId}"></canvas>` : body}</div>
   </div>`;
@@ -1082,7 +1098,7 @@ function renderIndicatorStatus() {
 const dayLabels = () => RECS.map((r) => fmtDayShort(r.date));
 
 /* ── 10.1 Planta General ── */
-const KPI_ORDER = ['ratioAgua','produccion','consumoPozos','consumoNano','rechazoNano','recuperacionWUR','consumoCIP','eficienciaRO'];
+const KPI_ORDER = ['ratioAgua','produccion','consumoPozos','consumoNano','rechazoNano','recuperacionWUR','eficienciaRO'];
 
 function renderPlanta(root) {
   const kpis = computePlantKpis(RECS);
@@ -1710,6 +1726,28 @@ document.getElementById('burger').addEventListener('click', () => {
   document.getElementById('backdrop').classList.toggle('show');
 });
 document.getElementById('backdrop').addEventListener('click', closeSidebar);
+
+/* Descarga de gráficos como imagen PNG (con fondo del tema oscuro) */
+function downloadChart(canvasId) {
+  const src = document.getElementById(canvasId);
+  if (!src || typeof src.getContext !== 'function') return;
+  const out = document.createElement('canvas');
+  out.width = src.width;
+  out.height = src.height;
+  const ctx = out.getContext('2d');
+  if (!ctx) return;
+  ctx.fillStyle = '#0e1628';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(src, 0, 0);
+  const a = document.createElement('a');
+  a.href = out.toDataURL('image/png');
+  a.download = `aquaplant-${state.page}-${canvasId}-${state.start}_${state.end}.png`;
+  a.click();
+}
+document.getElementById('page-root').addEventListener('click', (e) => {
+  const btn = e.target.closest('.chart-dl');
+  if (btn) downloadChart(btn.dataset.canvas);
+});
 
 /* ════════════════ 12. Inicio ════════════════ */
 reloadData();
