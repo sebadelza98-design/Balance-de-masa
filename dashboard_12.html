@@ -1034,11 +1034,11 @@ function statusPill(status) {
   const lbl = { ok: 'Óptimo', warn: 'Alerta', bad: 'Crítico' }[status];
   return `<span class="status-pill ${status}"><span class="status-dot ${status}"></span>${lbl}</span>`;
 }
-function kpiCard({ label, value, unit, decimals = 0, accent = '#22d3ee', status = null, delta = null, tone = 'neutral', subtitle = 'vs período anterior' }) {
+function kpiCard({ label, value, unit, decimals = 0, accent = '#22d3ee', status = null, delta = null, tone = 'neutral', subtitle = 'vs período anterior', showDelta = true }) {
   return `<div class="kpi-card" style="--kpi-accent:${accent}">
     <div class="kpi-head"><span class="kpi-label">${label}</span>${status ? `<span class="status-dot ${status}"></span>` : ''}</div>
     <div class="kpi-value">${fmt(value, decimals)}<span class="unit">${unit}</span></div>
-    <div class="kpi-foot">${deltaBadge(delta, tone)}<span class="kpi-target">${subtitle}</span></div>
+    <div class="kpi-foot">${showDelta ? deltaBadge(delta, tone) : ''}<span class="kpi-target">${subtitle}</span></div>
   </div>`;
 }
 function chartCard({ span = 12, title, subtitle = '', canvasId, height = 300, actions = '', body = '', cls = '' }) {
@@ -1108,18 +1108,16 @@ const KPI_ORDER = ['ratioAgua','produccion','consumoPozos','consumoNano','rechaz
 
 function renderPlanta(root) {
   const kpis = computePlantKpis(RECS);
-  const prevK = computePlantKpis(PREV);
   const dailyK = RECS.map((r) => computePlantKpis([r]));
   const ranking = consumerRanking(RECS);
   const monthly = monthlySeries(HIST, { pozos: totalPozos, produccion: totalProduccion });
 
   const cards = KPI_ORDER.map((key) => {
     const def = KPI_DEFS[key];
-    const d = deltaPct(kpis[key], prevK?.[key] ?? null);
     return kpiCard({
       label: def.label, value: kpis[key], unit: def.unit, decimals: def.decimals,
-      accent: def.accent, status: evalStatus(kpis[key], def), delta: d, tone: evalDelta(d, def),
-      subtitle: def.ok !== undefined ? `Meta ${def.direction === 'below' ? '≤' : '≥'} ${fmt(def.ok, def.decimals)} ${def.unit}` : 'vs período anterior',
+      accent: def.accent, status: evalStatus(kpis[key], def), showDelta: false,
+      subtitle: def.ok !== undefined ? `Meta ${def.direction === 'below' ? '≤' : '≥'} ${fmt(def.ok, def.decimals)} ${def.unit}` : '',
     });
   }).join('');
 
@@ -1129,7 +1127,7 @@ function renderPlanta(root) {
     ${pageHeader('Planta General', 'Balance hídrico global: captación, tratamiento, producción y servicios')}
     <div class="kpi-grid">${cards}</div>
     <div class="chart-grid">
-      ${chartCard({ span: 12, title: 'Semáforo de desempeño', subtitle: 'Indicadores de planta vs metas y período anterior', body: '<div id="tbl-status"></div>' })}
+      ${chartCard({ span: 12, title: 'Semáforo de desempeño', subtitle: 'Indicadores de planta vs metas', body: '<div id="tbl-status"></div>' })}
     </div>
     <div class="chart-grid">
       ${chartCard({ span: 7, title: 'Tendencia diaria del indicador', subtitle: 'Comportamiento día a día dentro del período', canvasId: 'ch-trend', actions: `<select id="sel-kpi">${kpiOptions}</select>` })}
@@ -1222,13 +1220,10 @@ function renderPlanta(root) {
   renderTable('tbl-status', [
     { key: 'indicador', label: 'Indicador' },
     { key: 'valor', label: 'Valor', num: true, html: (r) => `${fmt(r.valor, r.dec)} ${r.unidad}` },
-    { key: 'anterior', label: 'Período anterior', num: true, html: (r) => `${fmt(r.anterior, r.dec)} ${r.unidad}` },
-    { key: 'delta', label: 'Δ %', num: true, html: (r) => deltaBadge(r.delta, r.tone) },
     { key: 'status', label: 'Estado', html: (r) => statusPill(r.status) },
   ], KPI_ORDER.map((key) => {
     const def = KPI_DEFS[key];
-    const d = deltaPct(kpis[key], prevK?.[key] ?? null);
-    return { indicador: def.label, valor: kpis[key], anterior: prevK?.[key] ?? null, dec: def.decimals, unidad: def.unit, delta: d, tone: evalDelta(d, def), status: evalStatus(kpis[key], def) };
+    return { indicador: def.label, valor: kpis[key], dec: def.decimals, unidad: def.unit, status: evalStatus(kpis[key], def) };
   }), null);
 }
 
