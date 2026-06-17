@@ -603,11 +603,11 @@ const clampISO = (v, min, max) => (v < min ? min : v > max ? max : v);
 /* ════════════════ 3. Catálogo de planta ════════════════ */
 const PALETTE = ['#22d3ee','#3b82f6','#a78bfa','#f472b6','#fb923c','#facc15','#4ade80','#2dd4bf','#94a3b8','#e879f9'];
 const LINEAS_RETORNABLES = [
-  { id: 'linea1', nombre: 'Línea 1', color: PALETTE[0] },
-  { id: 'linea2', nombre: 'Línea 2', color: PALETTE[1] },
-  { id: 'linea3', nombre: 'Línea 3', color: PALETTE[2] },
-  { id: 'linea4', nombre: 'Línea 4', color: PALETTE[3] },
-  { id: 'linea5', nombre: 'Línea 5', color: PALETTE[4] },
+  { id: 'linea1', nombre: 'Consumo Agua Lavadora Línea 1', color: PALETTE[0] },
+  { id: 'linea2', nombre: 'Consumo Agua Lavadora Línea 2', color: PALETTE[1] },
+  { id: 'linea3', nombre: 'Consumo Agua Lavadora Línea 3', color: PALETTE[2] },
+  { id: 'linea4', nombre: 'Consumo Agua Lavadora Línea 4', color: PALETTE[3] },
+  { id: 'linea5', nombre: 'Consumo Agua Lavadora Línea 5', color: PALETTE[4] },
   { id: 'linea11', nombre: 'Línea 11', color: PALETTE[5] },
 ];
 const LINEA_ONE_WAY = { id: 'oneWay', nombre: 'Línea One Way', color: PALETTE[6] };
@@ -1111,7 +1111,6 @@ function renderPlanta(root) {
   const kpis = computePlantKpis(RECS);
   const dailyK = RECS.map((r) => computePlantKpis([r]));
   const ranking = consumerRanking(RECS);
-  const monthly = monthlySeries(HIST, { pozos: totalPozos, produccion: totalProduccion });
 
   const cards = KPI_ORDER.map((key) => {
     const def = KPI_DEFS[key];
@@ -1129,8 +1128,7 @@ function renderPlanta(root) {
     <div class="kpi-grid">${cards}</div>
     <div class="chart-grid">
       ${chartCard({ span: 12, title: 'Tendencia diaria del indicador', subtitle: 'Comportamiento día a día dentro del período', canvasId: 'ch-trend', actions: `<select id="sel-kpi">${kpiOptions}</select>` })}
-      ${chartCard({ span: 7, title: 'Evolución mensual acumulada', subtitle: 'Últimos 12 meses · pozos vs bebida producida', canvasId: 'ch-monthly' })}
-      ${chartCard({ span: 5, title: 'Distribución del consumo', subtitle: 'Participación por consumidor en el período', canvasId: 'ch-donut' })}
+      ${chartCard({ span: 12, title: 'Distribución del consumo', subtitle: 'Participación por consumidor en el período', canvasId: 'ch-donut' })}
       ${chartCard({ span: 12, title: 'Ranking de consumidores de agua', subtitle: 'Principales consumidores del período (m³)', canvasId: 'ch-rank', height: 340 })}
     </div>`;
 
@@ -1154,16 +1152,6 @@ function renderPlanta(root) {
   };
   drawTrend('ratioAgua');
   document.getElementById('sel-kpi').addEventListener('change', (e) => drawTrend(e.target.value));
-
-  /* Mensual acumulado */
-  makeChart('ch-monthly', {
-    type: 'bar',
-    data: { labels: monthly.map((m) => fmtMonthShort(m.month)), datasets: [
-      barDataset('Agua de pozos (m³)', monthly.map((m) => Math.round(m.pozos)), '#3b82f6'),
-      barDataset('Bebida producida (m³)', monthly.map((m) => Math.round(m.produccion)), '#4ade80'),
-    ]},
-    options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 0) } }, scales: scalesXY('m³', 0) },
-  });
 
   /* Donut distribución */
   const topDonut = ranking.slice(0, 8);
