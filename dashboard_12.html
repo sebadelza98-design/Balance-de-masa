@@ -1187,21 +1187,19 @@ function renderRetornable(root) {
   const prevTotals = LINEAS_RETORNABLES.map((l) => ({ ...l, ...lineTotals(PREV, l.id) }));
   const agua = sum(totals.map((t) => t.agua));
   const prod = sum(totals.map((t) => t.produccion));
-  const aguaP = sum(prevTotals.map((t) => t.agua));
-  const prodP = sum(prevTotals.map((t) => t.produccion));
   const ratio = safeDiv(agua, prod);
-  const ratioP = safeDiv(aguaP, prodP);
   const mejor = totals.filter((t) => t.ratio !== null && t.produccion > 0).sort((a, b) => a.ratio - b.ratio)[0] ?? null;
-
-  const dAgua = deltaPct(agua, aguaP), dProd = deltaPct(prod, prodP), dRatio = deltaPct(ratio, ratioP);
 
   root.innerHTML = `
     ${pageHeader('Líneas Retornables', 'Líneas 1 · 2 · 3 · 4 · 5 · 11 — lavado y envasado retornable')}
     <div class="kpi-grid">
-      ${kpiCard({ label: 'Consumo de agua', value: agua, unit: 'm³', accent: '#3b82f6', delta: dAgua, tone: evalDelta(dAgua, { deltaGood: 'down' }) })}
-      ${kpiCard({ label: 'Bebida producida', value: prod, unit: 'm³', accent: '#4ade80', delta: dProd, tone: evalDelta(dProd, { deltaGood: 'up' }) })}
-      ${kpiCard({ label: 'Ratio agua / bebida', value: ratio, unit: 'L/L', decimals: 2, accent: '#22d3ee', status: evalStatus(ratio, LINE_RATIO), delta: dRatio, tone: evalDelta(dRatio, LINE_RATIO), subtitle: `Meta ≤ ${fmt(LINE_RATIO.ok, 1)} L/L` })}
-      ${kpiCard({ label: 'Línea más eficiente', value: mejor?.ratio ?? null, unit: '', decimals: 2, accent: '#facc15', subtitle: mejor ? `${mejor.nombre} · L/L` : 'Sin producción' })}
+      ${kpiCard({ label: 'Consumo de agua', value: agua, unit: 'm³', accent: '#3b82f6', showDelta: false, subtitle: '' })}
+      ${kpiCard({ label: 'Bebida producida', value: prod, unit: 'm³', accent: '#4ade80', showDelta: false, subtitle: '' })}
+      ${kpiCard({ label: 'Ratio agua / bebida', value: ratio, unit: 'L/L', decimals: 2, accent: '#22d3ee', status: evalStatus(ratio, LINE_RATIO), showDelta: false, subtitle: `Meta ≤ ${fmt(LINE_RATIO.ok, 1)} L/L` })}
+      ${kpiCard({ label: 'Línea más eficiente', value: mejor?.ratio ?? null, unit: '', decimals: 2, accent: '#facc15', showDelta: false, subtitle: mejor ? `${mejor.nombre} · L/L` : 'Sin producción' })}
+    </div>
+    <div class="chart-grid">
+      ${chartCard({ span: 12, title: 'BP · Real · GAP por línea', subtitle: 'Líneas retornables', body: '<div id="tbl-bp"></div>' })}
     </div>
     <div class="chart-grid">
       ${chartCard({ span: 12, title: 'Indicadores de eficiencia', subtitle: `Ratio objetivo ≤ ${fmt(LINE_RATIO.ok, 1)} L/L · alerta ≤ ${fmt(LINE_RATIO.warn, 1)} L/L`, body: '<div id="tbl-lineas"></div>' })}
@@ -1253,6 +1251,13 @@ function renderRetornable(root) {
     data: { labels: hist.map((m) => fmtMonthShort(m.month)), datasets: LINEAS_RETORNABLES.map((l) => lineDataset(l.nombre, hist.map((m) => Math.round(m[l.id])), l.color)) },
     options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 0) } }, scales: scalesXY('m³', 0) },
   });
+
+  renderTable('tbl-bp', [
+    { key: 'linea', label: 'Línea', html: (r) => r.linea },
+    { key: 'bp', label: 'BP', num: true, html: (r) => r.bp },
+    { key: 'real', label: 'Real', num: true, html: (r) => r.real },
+    { key: 'gap', label: 'GAP', num: true, html: (r) => r.gap },
+  ], LINEAS_RETORNABLES.map((l) => ({ linea: l.id.replace('linea', 'Línea '), bp: '—', real: '—', gap: '—' })), null);
 
   renderTable('tbl-lineas', [
     { key: 'nombre', label: 'Línea', html: (r) => `<span class="row-label"><span class="row-swatch" style="background:${r.color}"></span>${r.nombre}</span>` },
