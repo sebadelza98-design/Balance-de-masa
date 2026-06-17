@@ -1052,10 +1052,10 @@ function chartCard({ span = 12, title, subtitle = '', canvasId, height = 300, ac
     <div class="chart-body" ${canvasId ? `style="height:${height}px"` : ''}>${canvasId ? `<canvas id="${canvasId}"></canvas>` : body}</div>
   </div>`;
 }
-function pageHeader(title, subtitle, showCompare = true) {
+function pageHeader(title, subtitle) {
   return `<div class="page-title-row">
     <div><h1 class="page-title">${title}</h1><div class="page-subtitle">${subtitle}</div></div>
-    <div class="page-subtitle">Período: <strong>${fmtDateLong(state.start)} — ${fmtDateLong(state.end)}</strong>${showCompare ? ` · vs ${fmtDateLong(PREV_RANGE.start)} — ${fmtDateLong(PREV_RANGE.end)}` : ''}</div>
+    <div class="page-subtitle">Período: <strong>${fmtDateLong(state.start)} — ${fmtDateLong(state.end)}</strong></div>
   </div>`;
 }
 
@@ -1124,7 +1124,7 @@ function renderPlanta(root) {
   const kpiOptions = KPI_ORDER.map((k) => `<option value="${k}">${KPI_DEFS[k].label}</option>`).join('');
 
   root.innerHTML = `
-    ${pageHeader('Planta General', 'Balance hídrico global: captación, tratamiento, producción y servicios', false)}
+    ${pageHeader('Planta General', 'Balance hídrico global: captación, tratamiento, producción y servicios')}
     <div class="kpi-grid">${cards}</div>
     <div class="chart-grid">
       ${chartCard({ span: 12, title: 'Tendencia diaria del indicador', subtitle: 'Comportamiento día a día dentro del período', canvasId: 'ch-trend', actions: `<select id="sel-kpi">${kpiOptions}</select>` })}
