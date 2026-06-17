@@ -1129,8 +1129,7 @@ function renderPlanta(root) {
     ${pageHeader('Planta General', 'Balance hídrico global: captación, tratamiento, producción y servicios')}
     <div class="kpi-grid">${cards}</div>
     <div class="chart-grid">
-      ${chartCard({ span: 7, title: 'Tendencia diaria del indicador', subtitle: 'Comportamiento día a día dentro del período', canvasId: 'ch-trend', actions: `<select id="sel-kpi">${kpiOptions}</select>` })}
-      ${chartCard({ span: 5, title: 'Comparación con período anterior', subtitle: 'Series alineadas por día relativo', canvasId: 'ch-compare', actions: `<select id="sel-cmp"><option value="pozos">Consumo de pozos (m³)</option><option value="prod">Producción de bebida (m³)</option></select>` })}
+      ${chartCard({ span: 12, title: 'Tendencia diaria del indicador', subtitle: 'Comportamiento día a día dentro del período', canvasId: 'ch-trend', actions: `<select id="sel-kpi">${kpiOptions}</select>` })}
       ${chartCard({ span: 7, title: 'Evolución mensual acumulada', subtitle: 'Últimos 12 meses · pozos vs bebida producida', canvasId: 'ch-monthly' })}
       ${chartCard({ span: 5, title: 'Distribución del consumo', subtitle: 'Participación por consumidor en el período', canvasId: 'ch-donut' })}
       ${chartCard({ span: 12, title: 'Ranking de consumidores de agua', subtitle: 'Principales consumidores del período (m³)', canvasId: 'ch-rank', height: 340 })}
@@ -1156,27 +1155,6 @@ function renderPlanta(root) {
   };
   drawTrend('ratioAgua');
   document.getElementById('sel-kpi').addEventListener('change', (e) => drawTrend(e.target.value));
-
-  /* Comparación períodos */
-  let cmpChart = null;
-  const drawCompare = (mode) => {
-    const fn = mode === 'pozos' ? totalPozos : totalProduccion;
-    const n = Math.max(RECS.length, PREV.length);
-    const labels = Array.from({ length: n }, (_, i) => 'D' + (i + 1));
-    const cur = Array.from({ length: n }, (_, i) => (RECS[i] ? round1(fn(RECS[i])) : null));
-    const prev = Array.from({ length: n }, (_, i) => (PREV[i] ? round1(fn(PREV[i])) : null));
-    if (cmpChart) { cmpChart.destroy(); charts = charts.filter((c) => c !== cmpChart); }
-    cmpChart = makeChart('ch-compare', {
-      type: 'line',
-      data: { labels, datasets: [
-        lineDataset('Período actual', cur, '#22d3ee'),
-        lineDataset('Período anterior', prev, '#64748b', { dashed: true }),
-      ]},
-      options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 1) } }, scales: scalesXY('m³', 1) },
-    });
-  };
-  drawCompare('pozos');
-  document.getElementById('sel-cmp').addEventListener('change', (e) => drawCompare(e.target.value));
 
   /* Mensual acumulado */
   makeChart('ch-monthly', {
