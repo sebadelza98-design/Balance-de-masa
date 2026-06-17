@@ -1034,11 +1034,13 @@ function statusPill(status) {
   const lbl = { ok: 'Óptimo', warn: 'Alerta', bad: 'Crítico' }[status];
   return `<span class="status-pill ${status}"><span class="status-dot ${status}"></span>${lbl}</span>`;
 }
-function kpiCard({ label, value, unit, decimals = 0, accent = '#22d3ee', status = null, delta = null, tone = 'neutral', subtitle = 'vs período anterior', showDelta = true }) {
+function kpiCard({ label, value, unit, decimals = 0, accent = '#22d3ee', status = null, delta = null, tone = 'neutral', subtitle = 'vs período anterior', showDelta = true, statusText = false }) {
+  const headDot = (status && !statusText) ? `<span class="status-dot ${status}"></span>` : '';
+  const foot = (statusText && status) ? statusPill(status) : (showDelta ? deltaBadge(delta, tone) : '');
   return `<div class="kpi-card" style="--kpi-accent:${accent}">
-    <div class="kpi-head"><span class="kpi-label">${label}</span>${status ? `<span class="status-dot ${status}"></span>` : ''}</div>
+    <div class="kpi-head"><span class="kpi-label">${label}</span>${headDot}</div>
     <div class="kpi-value">${fmt(value, decimals)}<span class="unit">${unit}</span></div>
-    <div class="kpi-foot">${showDelta ? deltaBadge(delta, tone) : ''}<span class="kpi-target">${subtitle}</span></div>
+    <div class="kpi-foot">${foot}<span class="kpi-target">${subtitle}</span></div>
   </div>`;
 }
 function chartCard({ span = 12, title, subtitle = '', canvasId, height = 300, actions = '', body = '', cls = '' }) {
@@ -1116,7 +1118,7 @@ function renderPlanta(root) {
     const def = KPI_DEFS[key];
     return kpiCard({
       label: def.label, value: kpis[key], unit: def.unit, decimals: def.decimals,
-      accent: def.accent, status: evalStatus(kpis[key], def), showDelta: false,
+      accent: def.accent, status: evalStatus(kpis[key], def), showDelta: false, statusText: true,
       subtitle: def.ok !== undefined ? `Meta ${def.direction === 'below' ? '≤' : '≥'} ${fmt(def.ok, def.decimals)} ${def.unit}` : '',
     });
   }).join('');
@@ -1126,9 +1128,6 @@ function renderPlanta(root) {
   root.innerHTML = `
     ${pageHeader('Planta General', 'Balance hídrico global: captación, tratamiento, producción y servicios')}
     <div class="kpi-grid">${cards}</div>
-    <div class="chart-grid">
-      ${chartCard({ span: 12, title: 'Semáforo de desempeño', subtitle: 'Indicadores de planta vs metas', body: '<div id="tbl-status"></div>' })}
-    </div>
     <div class="chart-grid">
       ${chartCard({ span: 7, title: 'Tendencia diaria del indicador', subtitle: 'Comportamiento día a día dentro del período', canvasId: 'ch-trend', actions: `<select id="sel-kpi">${kpiOptions}</select>` })}
       ${chartCard({ span: 5, title: 'Comparación con período anterior', subtitle: 'Series alineadas por día relativo', canvasId: 'ch-compare', actions: `<select id="sel-cmp"><option value="pozos">Consumo de pozos (m³)</option><option value="prod">Producción de bebida (m³)</option></select>` })}
@@ -1215,16 +1214,6 @@ function renderPlanta(root) {
       scales: { x: { grid: { color: '#1b2742' }, ticks: { callback: (v) => fmtCompact(v) } }, y: { grid: { display: false } } },
     },
   });
-
-  /* Tabla semafórica */
-  renderTable('tbl-status', [
-    { key: 'indicador', label: 'Indicador' },
-    { key: 'valor', label: 'Valor', num: true, html: (r) => `${fmt(r.valor, r.dec)} ${r.unidad}` },
-    { key: 'status', label: 'Estado', html: (r) => statusPill(r.status) },
-  ], KPI_ORDER.map((key) => {
-    const def = KPI_DEFS[key];
-    return { indicador: def.label, valor: kpis[key], dec: def.decimals, unidad: def.unit, status: evalStatus(kpis[key], def) };
-  }), null);
 }
 
 /* ── 10.2 Retornable ── */
