@@ -1212,7 +1212,6 @@ function renderRetornable(root) {
       ${chartCard({ span: 5, title: 'Consumo acumulado del período', subtitle: 'Acumulado por línea (m³, apilado)', canvasId: 'ch-cum', height: 310 })}
       ${chartCard({ span: 7, title: 'Comparación entre líneas', subtitle: 'Agua vs bebida producida en el período', canvasId: 'ch-cmp-lineas' })}
       ${chartCard({ span: 5, title: 'Ranking de consumo', subtitle: 'Líneas ordenadas por consumo (m³)', canvasId: 'ch-rank' })}
-      ${chartCard({ span: 12, title: 'Tendencia histórica mensual', subtitle: 'Consumo mensual por línea · últimos 12 meses', canvasId: 'ch-hist', height: 310 })}
     </div>`;
 
   makeChart('ch-daily', {
@@ -1246,13 +1245,6 @@ function renderRetornable(root) {
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ` ${fmt(ctx.parsed.x, 0)} m³` } } },
       scales: { x: { grid: { color: '#1b2742' }, ticks: { callback: (v) => fmtCompact(v) } }, y: { grid: { display: false } } },
     },
-  });
-
-  const hist = monthlySeries(HIST, Object.fromEntries(LINEAS_RETORNABLES.map((l) => [l.id, (r) => r.lineas[l.id].agua])));
-  makeChart('ch-hist', {
-    type: 'line',
-    data: { labels: hist.map((m) => fmtMonthShort(m.month)), datasets: LINEAS_RETORNABLES.map((l) => lineDataset(l.nombre, hist.map((m) => Math.round(m[l.id])), l.color)) },
-    options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 0) } }, scales: scalesXY('m³', 0) },
   });
 
   const bpRecs = monthRecords(state.start);
