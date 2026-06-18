@@ -808,6 +808,7 @@ const AVAILABLE = { min: MIN_DATE, max: todayISO() };
 
 /* Datos cargados desde Excel/CSV (Map<iso, DailyRecord>). null = datos simulados. */
 let EXCEL_DATA = null;
+let LINE_BPREAL = null;  // BP/Real por línea leídos de la hoja «Árbol Agua Semanal 2» (col AG/AH)
 
 /** Capa de datos: simulada (buildDay) o, si hay archivo cargado, lo real. */
 function getDailyRecords(start, end) {
@@ -1198,7 +1199,7 @@ function renderRetornable(root) {
       ${kpiCard({ label: 'Línea más eficiente', value: mejor?.ratio ?? null, unit: '', decimals: 2, accent: '#facc15', showDelta: false, subtitle: mejor ? `${mejor.nombre} · L/L` : 'Sin producción' })}
     </div>
     <div class="chart-grid">
-      ${chartCard({ span: 12, title: 'BP · Real · GAP por línea', subtitle: 'Líneas retornables', body: '<div id="tbl-bp"></div>' })}
+      ${chartCard({ span: 12, title: 'BP · Real · GAP por línea', subtitle: 'Presupuesto (BP) vs Real por línea · GAP = Real - BP', body: '<div id="tbl-bp"></div>' })}
     </div>
     <div class="chart-grid">
       ${chartCard({ span: 7, title: 'Consumo diario de agua por línea', subtitle: 'm³/día dentro del período', canvasId: 'ch-daily', height: 310 })}
@@ -1250,10 +1251,17 @@ function renderRetornable(root) {
 
   renderTable('tbl-bp', [
     { key: 'linea', label: 'Línea', html: (r) => r.linea },
-    { key: 'bp', label: 'BP', num: true, html: (r) => r.bp },
-    { key: 'real', label: 'Real', num: true, html: (r) => r.real },
-    { key: 'gap', label: 'GAP', num: true, html: (r) => r.gap },
-  ], LINEAS_RETORNABLES.map((l) => ({ linea: l.id.replace('linea', 'Línea '), bp: '—', real: '—', gap: '—' })), null);
+    { key: 'bp', label: 'BP', num: true, html: (r) => fmt(r.bp, 0) },
+    { key: 'real', label: 'Real', num: true, html: (r) => fmt(r.real, 0) },
+    { key: 'gap', label: 'GAP', num: true, html: (r) => {
+      if (r.gap === null || r.gap === undefined) return '<span class="delta neutral">—</span>';
+      const tone = r.gap > 0 ? 'bad' : r.gap < 0 ? 'good' : 'neutral';
+      return `<span class="delta ${tone}" title="Real - BP">${r.gap > 0 ? '+' : ''}${fmt(r.gap, 0)}</span>`;
+    } },
+  ], LINEAS_RETORNABLES.map((l) => {
+    const v = LINE_BPREAL && LINE_BPREAL[l.id];
+    return { linea: l.id.replace('linea', 'Línea '), bp: v ? v.bp : null, real: v ? v.real : null, gap: v ? v.gap : null };
+  }), null);
 }
 
 /* ── 10.3 Detalle de línea individual (One Way / Línea 10) ── */
@@ -1889,6 +1897,29 @@ function metroscubToRecords(wb) {
   return [...map.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
+/* ─── BP / Real por línea (hoja «Árbol Agua Semanal 2»): BP = col AG, Real = col AH;
+   filas 4, 8, 12, 16, 20, 24 → líneas 1, 2, 3, 4, 5, 11. GAP = Real - BP ─── */
+function lineBpRealFromWb(wb) {
+  const target = normLabel('Árbol Agua Semanal 2');
+  const name = wb.SheetNames.find((n) => normLabel(n) === target);
+  const ws = name ? wb.Sheets[name] : null;
+  if (!ws) return null;
+  const cellNum = (addr) => {
+    const c = ws[addr];
+    if (!c || c.v === null || c.v === undefined || c.v === '') return null;
+    const n = typeof c.v === 'number' ? c.v : Number(c.v);
+    return isFinite(n) ? n : null;
+  };
+  const rowOf = { linea1: 4, linea2: 8, linea3: 12, linea4: 16, linea5: 20, linea11: 24 };
+  const out = {};
+  for (const id in rowOf) {
+    const bp = cellNum('AG' + rowOf[id]);
+    const real = cellNum('AH' + rowOf[id]);
+    out[id] = { bp, real, gap: (bp !== null && real !== null) ? real - bp : null };
+  }
+  return out;
+}
+
 function setSource(text, isFile) {
   const el = document.getElementById('src-label');
   if (el) el.textContent = 'Fuente de datos: ' + text;
@@ -1922,6 +1953,7 @@ function applyExcelData(records, fileName) {
 
 function revertToMock() {
   EXCEL_DATA = null;
+  LINE_BPREAL = null;
   AVAILABLE.min = MIN_DATE;
   AVAILABLE.max = todayISO();
   state.start = startOfMonth(todayISO());
@@ -1966,8 +1998,10 @@ async function handleFile(e) {
   try {
     const name = file.name.toLowerCase();
     let records;
+    LINE_BPREAL = null;
     if (!name.endsWith('.csv') && typeof XLSX !== 'undefined') {
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+      LINE_BPREAL = lineBpRealFromWb(wb);
       if (wb.SheetNames.includes('METROSCUB')) {
         records = metroscubToRecords(wb);
         if (!records.length) throw new Error('Hoja METROSCUB encontrada pero sin fechas válidas en la fila de fechas.');
