@@ -1041,7 +1041,7 @@ function statusPill(status) {
   const lbl = { ok: 'Óptimo', warn: 'Alerta', bad: 'Crítico' }[status];
   return `<span class="status-pill ${status}"><span class="status-dot ${status}"></span>${lbl}</span>`;
 }
-function kpiCard({ label, value, unit, decimals = 0, accent = '#22d3ee', status = null, delta = null, tone = 'neutral', subtitle = 'vs período anterior', showDelta = true, statusText = false }) {
+function kpiCard({ label, value, unit, decimals = 0, accent = '#22d3ee', status = null, delta = null, tone = 'neutral', subtitle = '', showDelta = true, statusText = false }) {
   const headDot = (status && !statusText) ? `<span class="status-dot ${status}"></span>` : '';
   const foot = (statusText && status) ? statusPill(status) : (showDelta ? deltaBadge(delta, tone) : '');
   return `<div class="kpi-card" style="--kpi-accent:${accent}">
@@ -1288,7 +1288,7 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
     ${pageHeader(title, subtitle)}
     <div class="kpi-grid">
       ${lineId === 'oneWay' ? '' : kpiCard({ label: 'Consumo de agua', value: k.agua, unit: 'm³', accent: '#3b82f6', delta: dAgua, tone: evalDelta(dAgua, { deltaGood: 'down' }) })}
-      ${kpiCard({ label: 'Bebida producida', value: k.produccion, unit: 'm³', accent: '#4ade80', delta: dProd, tone: evalDelta(dProd, { deltaGood: 'up' }), subtitle: lineId === 'oneWay' ? '' : 'vs período anterior' })}
+      ${kpiCard({ label: 'Bebida producida', value: k.produccion, unit: 'm³', accent: '#4ade80', delta: dProd, tone: evalDelta(dProd, { deltaGood: 'up' }) })}
       ${kpiCard({ label: 'Ratio agua / bebida', value: k.ratio, unit: 'L/L', decimals: 2, accent: color, status: evalStatus(k.ratio, LINE_RATIO), delta: dRatio, tone: evalDelta(dRatio, LINE_RATIO), subtitle: `Meta ≤ ${fmt(LINE_RATIO.ok, 1)} L/L` })}
       ${kpiCard({ label: 'Día de mayor consumo', value: peakIdx >= 0 ? aguaDaily[peakIdx] : null, unit: 'm³', accent: '#fb923c', subtitle: peakIdx >= 0 ? fmtDayShort(RECS[peakIdx].date) : '—' })}
     </div>
