@@ -661,6 +661,10 @@ const KPI_DEFS = {
 const LINE_RATIO = { direction: 'below', ok: 1.9, warn: 2.4 };
 const LINE_BP_FACTOR = 0.14;  // factor de presupuesto (BP) por línea, igual para las 6 líneas
 const ZONA_HUMEDA_BP = 0.05;  // presupuesto (BP) zona húmeda ÷ producción total (todas las líneas)
+const LINEA10_BP = 0.07;      // presupuesto (BP) merma L10 ÷ producción total (L1–L12 + PMIX)
+// Líneas de producción de la hoja "Producciones" (todas y subconjunto One Way)
+const PROD_LINES_ALL = ['l1', 'l2', 'l3', 'l4', 'l5', 'l6', 'l7', 'l8', 'l9', 'l10', 'l11', 'l12', 'pmix'];
+const OW_PROD_LINES = ['l6', 'l7', 'l8', 'l9', 'l12', 'pmix'];
 const POTABLE_EF = { direction: 'above', ok: 92, warn: 86 };
 const ELAB_RATIO = { direction: 'below', ok: 1.45, warn: 1.7 };
 
@@ -817,14 +821,21 @@ function buildDay(iso) {
     },
   };
 
-  // One Way: producción de las líneas L6+L7+L8+L9+L12+PMIX (en mock, repartida)
-  const owProduccion = round1(lineas.oneWay ? lineas.oneWay.produccion : produccionTotal * 0.4);
-  const OW_SHARES = { l6: 0.3, l9: 0.28, l12: 0.25, l7: 0.08, pmix: 0.05, l8: 0.04 };
-  const owLineas = {};
-  for (const id in OW_SHARES) owLineas[id] = round1(owProduccion * OW_SHARES[id] * noise(0.6));
+  // Producción por línea L1..L12 + PMIX (en mock, repartida sobre la producción total)
+  const PROD_SHARES = { l1: 0.08, l2: 0.07, l3: 0.06, l4: 0.06, l5: 0.06, l6: 0.10, l7: 0.05, l8: 0.04, l9: 0.10, l10: 0.05, l11: 0.06, l12: 0.13, pmix: 0.05 };
+  const OW_IDS = ['l6', 'l7', 'l8', 'l9', 'l12', 'pmix'];
+  const prodLineas = {}; let prodAllLines = 0, owProduccion = 0;
+  for (const id in PROD_SHARES) {
+    const v = round1(produccionTotal * PROD_SHARES[id] * noise(0.6));
+    prodLineas[id] = v; prodAllLines += v;
+    if (OW_IDS.indexOf(id) >= 0) owProduccion += v;
+  }
+  prodAllLines = round1(prodAllLines); owProduccion = round1(owProduccion);
+  const enviadoL11 = round1(prodLineas.l11 * 1.6 * noise(0.2));
+  const enviadoL10 = round1(prodLineas.l10 + enviadoL11 + produccionTotal * 0.04 * noise(0.3));
   const zonaHumeda = round1(produccionTotal * 0.05 * improvement * noise(0.22));
 
-  return { date: iso, zonaHumeda, owProduccion, owLineas, pozos, nano, wur, ro, cip: { cip: round1(cipVal), enjuague: round1(enjuague) }, lineas, servicios, aguaPotable, elaboracion };
+  return { date: iso, zonaHumeda, owProduccion, prodLineas, prodAllLines, enviadoL10, enviadoL11, pozos, nano, wur, ro, cip: { cip: round1(cipVal), enjuague: round1(enjuague) }, lineas, servicios, aguaPotable, elaboracion };
 }
 
 const AVAILABLE = { min: MIN_DATE, max: todayISO() };
@@ -1295,6 +1306,7 @@ function renderRetornable(root) {
 /* ── 10.3 Detalle de línea individual (One Way / Línea 10) ── */
 function renderLineDetail(root, { lineId, title, subtitle, color }) {
   const isOneWay = lineId === 'oneWay';
+  const isLinea10 = lineId === 'linea10';
   const k = lineTotals(RECS, lineId);
   const kp = lineTotals(PREV, lineId);
   const dAgua = deltaPct(k.agua, kp.agua), dProd = deltaPct(k.produccion, kp.produccion), dRatio = deltaPct(k.ratio, kp.ratio);
@@ -1315,7 +1327,7 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
   let owPeak = null; // { date, line, val }
   if (isOneWay) {
     for (const r of RECS) {
-      const lines = r.owLineas || {};
+      const lines = r.prodLineas || {};
       for (const id of OW_PROD_LINES) {
         const v = lines[id] ?? 0;
         if (owPeak === null || v > owPeak.val) owPeak = { date: r.date, line: id, val: v };
@@ -1336,10 +1348,25 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
       <div class="kpi-foot"><span class="kpi-target">zona húmeda ÷ producción total (L1–L12 + PMIX)</span></div>
     </div>`;
 
+  // Indicador Línea 10 (merma): Real = (Enviado L10 − Producción L10 − Enviado L11) ÷ Σ(L1–L12 + PMIX)
+  const l10Num = sum(RECS.map((r) => (r.enviadoL10 ?? 0) - ((r.prodLineas && r.prodLineas.l10) || 0) - (r.enviadoL11 ?? 0)));
+  const l10Div = sum(RECS.map((r) => r.prodAllLines ?? 0));
+  const l10Real = safeDiv(l10Num, l10Div);
+  const l10Color = l10Real === null ? 'var(--text)' : (l10Real <= LINEA10_BP ? 'var(--ok)' : 'var(--bad)');
+  const linea10KpiCard = `<div class="kpi-card" style="--kpi-accent:#a78bfa">
+      <div class="kpi-head"><span class="kpi-label">Línea 10 · BP vs Real</span></div>
+      <div class="bp-kpi-rows">
+        <div class="bp-kpi-row"><span class="bp-kpi-name">BP</span><span class="bp-kpi-num">${fmt(LINEA10_BP, 3)}</span></div>
+        <div class="bp-kpi-row"><span class="bp-kpi-name">real</span><span class="bp-kpi-num" style="color:${l10Color}">${fmt(l10Real, 3)}</span></div>
+      </div>
+      <div class="kpi-foot"><span class="kpi-target">(Env. L10 − Prod. L10 − Env. L11) ÷ Σ(L1–L12 + PMIX)</span></div>
+    </div>`;
+
   root.innerHTML = `
     ${pageHeader(title, subtitle)}
     <div class="kpi-grid">
       ${isOneWay ? zonaKpiCard : ''}
+      ${isLinea10 ? linea10KpiCard : ''}
       ${isOneWay ? '' : kpiCard({ label: 'Consumo de agua', value: k.agua, unit: 'm³', accent: '#3b82f6', delta: dAgua, tone: evalDelta(dAgua, { deltaGood: 'down' }) })}
       ${kpiCard({ label: 'Bebida producida', value: isOneWay ? owProdSum : k.produccion, unit: 'm³', accent: '#4ade80', delta: isOneWay ? dOwProd : dProd, tone: evalDelta(isOneWay ? dOwProd : dProd, { deltaGood: 'up' }) })}
       ${isOneWay ? '' : kpiCard({ label: 'Ratio agua / bebida', value: k.ratio, unit: 'L/L', decimals: 2, accent: color, status: evalStatus(k.ratio, LINE_RATIO), delta: dRatio, tone: evalDelta(dRatio, LINE_RATIO), subtitle: `Meta ≤ ${fmt(LINE_RATIO.ok, 1)} L/L` })}
@@ -1795,7 +1822,10 @@ function emptyRecord(date) {
     bebidaTotal: 0,
     zonaHumeda: 0,
     owProduccion: 0,
-    owLineas: {},
+    prodLineas: {},
+    prodAllLines: 0,
+    enviadoL10: 0,
+    enviadoL11: 0,
     pozos: { pozo1: 0, pozo2: 0, pozo3: 0, pozo1b: 0 },
     nano: { alimentacion: 0, rechazo: 0, permeado: 0 },
     wur: { alimentacion: 0, recuperada: 0 },
@@ -1937,6 +1967,7 @@ function metroscubToRecords(wb) {
     cip: valsOf(exact('cip')), enjuague: valsOf(incl('enjuague de lineas')),
     torres: valsOf(incl('torres de enfriamiento')), cald1: valsOf(incl('caldera 1')), cald2: valsOf(incl('caldera 2')), otrosServ: valsOf(incl('otros servicios')),
     zonaHum: valsOf(exact('zona humeda')),
+    envL10: valsOf(exact('enviado l10')), envL11: valsOf(exact('enviado l11')),
   };
   const lineDefs = {
     linea1: ['produccion l1', 'consumo agua lavadora linea 1'], linea2: ['produccion l2', 'consumo agua lavadora linea 2'],
@@ -1952,6 +1983,7 @@ function metroscubToRecords(wb) {
     const r = emptyRecord(d.iso); const c = d.c;
     r.bebidaTotal = round1(R.bebida[c]);
     r.zonaHumeda = round1(R.zonaHum[c]);
+    r.enviadoL10 = round1(R.envL10[c]); r.enviadoL11 = round1(R.envL11[c]);
     r.pozos.pozo1 = round1(R.pozos[c]);
     r.aguaPotable.consumo = round1(Math.max(0, R.pozosPot[c] - R.pozos[c]));
     r.nano.alimentacion = round1(R.nanoAlim[c]);
@@ -1970,11 +2002,11 @@ function metroscubToRecords(wb) {
   return [...map.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
-/* ─── Producción One Way (L6+L7+L8+L9+L12+PMIX) desde la hoja "Producciones" ───
-   Layout transpuesto: fechas en una fila, líneas como etiquetas en la columna B.
-   Devuelve Map(fechaISO -> { total, lines: {l6, l7, l8, l9, l12, pmix} }). */
-const OW_PROD_LINES = ['l6', 'l7', 'l8', 'l9', 'l12', 'pmix'];
-function produccionesOwMap(wb) {
+/* ─── Producción por línea desde la hoja "Producciones" ───
+   Layout transpuesto: fechas en una fila, líneas (L1..L12, PMIX) como
+   etiquetas en la columna B. Devuelve
+   Map(fechaISO -> { lines: {l1..l12, pmix}, total: Σ todas, ow: Σ One Way }). */
+function produccionesLineMap(wb) {
   const map = new Map();
   const ws = wb.Sheets['Producciones'];
   if (!ws) return map;
@@ -1995,21 +2027,20 @@ function produccionesOwMap(wb) {
     else if (started) break;
   }
   if (!dateCols.length) return map;
-  // Fila de cada línea One Way: se escanean TODAS las columnas en busca de la
-  // etiqueta (robusto al índice de columna que use SheetJS según el rango de
-  // la hoja; "Producciones" empieza en la columna B, no en A).
+  // Fila de cada línea: se escanean TODAS las columnas en busca de la etiqueta
+  // (robusto al índice de columna que use SheetJS; "Producciones" empieza en B).
   const labelRow = {};
   for (let r = 0; r < grid.length; r++) {
     const row = grid[r] || [];
     for (let c = 0; c < row.length; c++) {
       const lab = normLabel(row[c]);
-      if (OW_PROD_LINES.indexOf(lab) >= 0 && !(lab in labelRow)) labelRow[lab] = r;
+      if (PROD_LINES_ALL.indexOf(lab) >= 0 && !(lab in labelRow)) labelRow[lab] = r;
     }
   }
   for (const d of dateCols) {
     if (!d.iso) continue;
-    const lines = {}; let total = 0;
-    for (const id of OW_PROD_LINES) {
+    const lines = {}; let total = 0, ow = 0;
+    for (const id of PROD_LINES_ALL) {
       const ri = labelRow[id];
       let v = 0;
       if (ri != null) {
@@ -2018,8 +2049,9 @@ function produccionesOwMap(wb) {
       }
       lines[id] = round1(v);
       total += v;
+      if (OW_PROD_LINES.indexOf(id) >= 0) ow += v;
     }
-    map.set(d.iso, { total: round1(total), lines });
+    map.set(d.iso, { lines, total: round1(total), ow: round1(ow) });
   }
   return map;
 }
@@ -2106,11 +2138,11 @@ async function handleFile(e) {
       if (wb.SheetNames.includes('METROSCUB')) {
         records = metroscubToRecords(wb);
         if (!records.length) throw new Error('Hoja METROSCUB encontrada pero sin fechas válidas en la fila de fechas.');
-        // Producción One Way (L6+L7+L8+L9+L12+PMIX) desde la hoja "Producciones"
-        const owMap = produccionesOwMap(wb);
-        if (owMap.size) records.forEach((r) => {
-          const e = owMap.get(r.date);
-          if (e) { r.owProduccion = e.total; r.owLineas = e.lines; }
+        // Producción por línea (L1..L12 + PMIX) desde la hoja "Producciones"
+        const lineMap = produccionesLineMap(wb);
+        if (lineMap.size) records.forEach((r) => {
+          const e = lineMap.get(r.date);
+          if (e) { r.prodLineas = e.lines; r.prodAllLines = e.total; r.owProduccion = e.ow; }
         });
       } else {
         const ws = wb.Sheets[wb.SheetNames[0]];
