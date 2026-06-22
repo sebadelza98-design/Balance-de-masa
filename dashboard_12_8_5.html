@@ -1334,6 +1334,14 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
       }
     }
   }
+  // Día de mayor producción L10 (de la hoja "Producciones")
+  let l10Peak = null; // { date, val }
+  if (isLinea10) {
+    for (const r of RECS) {
+      const v = (r.prodLineas && r.prodLineas.l10) || 0;
+      if (l10Peak === null || v > l10Peak.val) l10Peak = { date: r.date, val: v };
+    }
+  }
   // Indicador Zona húmeda (solo One Way): Real = Σ zona húmeda ÷ Σ producción total (todas las líneas: L1–L12 + PMIX)
   const zonaSum = sum(RECS.map((r) => r.zonaHumeda ?? 0));
   const prodSum = sum(RECS.map(totalProduccion));
@@ -1372,10 +1380,14 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
       ${(isOneWay || isLinea10) ? '' : kpiCard({ label: 'Ratio agua / bebida', value: k.ratio, unit: 'L/L', decimals: 2, accent: color, status: evalStatus(k.ratio, LINE_RATIO), delta: dRatio, tone: evalDelta(dRatio, LINE_RATIO), subtitle: `Meta ≤ ${fmt(LINE_RATIO.ok, 1)} L/L` })}
       ${kpiCard({
         label: 'Día de mayor consumo',
-        value: isOneWay ? (owPeak && owPeak.val > 0 ? owPeak.val : null) : (peakIdx >= 0 ? aguaDaily[peakIdx] : null),
+        value: isOneWay ? (owPeak && owPeak.val > 0 ? owPeak.val : null)
+             : isLinea10 ? (l10Peak && l10Peak.val > 0 ? l10Peak.val : null)
+             : (peakIdx >= 0 ? aguaDaily[peakIdx] : null),
         unit: 'm³', accent: '#fb923c',
         subtitle: isOneWay
           ? (owPeak && owPeak.val > 0 ? `${fmtDayShort(owPeak.date)} · ${owPeak.line.toUpperCase()}` : '—')
+          : isLinea10
+          ? (l10Peak && l10Peak.val > 0 ? `${fmtDayShort(l10Peak.date)} · L10` : '—')
           : (peakIdx >= 0 ? fmtDayShort(RECS[peakIdx].date) : '—'),
       })}
     </div>
