@@ -1973,11 +1973,16 @@ function produccionesOwMap(wb) {
     else if (started) break;
   }
   if (!dateCols.length) return map;
-  // etiqueta(col B) -> índice de fila (primera aparición)
+  // Fila de cada línea One Way: se escanean TODAS las columnas en busca de la
+  // etiqueta (robusto al índice de columna que use SheetJS según el rango de
+  // la hoja; "Producciones" empieza en la columna B, no en A).
   const labelRow = {};
   for (let r = 0; r < grid.length; r++) {
-    const lab = normLabel((grid[r] || [])[1]);
-    if (lab && !(lab in labelRow)) labelRow[lab] = r;
+    const row = grid[r] || [];
+    for (let c = 0; c < row.length; c++) {
+      const lab = normLabel(row[c]);
+      if (OW_PROD_LINES.indexOf(lab) >= 0 && !(lab in labelRow)) labelRow[lab] = r;
+    }
   }
   const lineRows = OW_PROD_LINES.map((id) => labelRow[id]).filter((r) => r != null);
   for (const d of dateCols) {
