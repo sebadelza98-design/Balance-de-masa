@@ -1238,7 +1238,7 @@ function renderRetornable(root) {
       ${kpiCard({ label: 'Línea más eficiente', value: mejor?.ratio ?? null, unit: '', decimals: 2, accent: '#facc15', showDelta: false, subtitle: mejor ? `${mejor.nombre} · L/L` : 'Sin producción' })}
     </div>
     <div class="chart-grid">
-      ${chartCard({ span: 12, title: 'BP · Real · GAP por línea', subtitle: 'Mensual · BP = participación × 0,14 · Real = agua ÷ bebida · GAP = Real - BP', body: '<div id="tbl-bp"></div>' })}
+      ${chartCard({ span: 12, title: 'BP · Real · GAP por línea', subtitle: 'Período seleccionado · BP = participación × 0,14 · Real = agua ÷ bebida · GAP = Real - BP', body: '<div id="tbl-bp"></div>' })}
     </div>
     <div class="chart-grid">
       ${chartCard({ span: 7, title: 'Consumo diario de agua por línea', subtitle: 'm³/día dentro del período', canvasId: 'ch-daily', height: 310 })}
@@ -1280,7 +1280,7 @@ function renderRetornable(root) {
     },
   });
 
-  const bpRecs = monthRecords(state.start);
+  const bpRecs = RECS;
   const bpLineTotals = LINEAS_RETORNABLES.map((l) => sum(bpRecs.map((r) => r.lineas[l.id]?.agua ?? 0)));
   const bpSumLines = sum(bpLineTotals);
   const bpBebida = sum(bpRecs.map((r) => r.bebidaTotal ?? 0));
