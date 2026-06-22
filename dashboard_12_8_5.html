@@ -1369,7 +1369,7 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
       ${isLinea10 ? linea10KpiCard : ''}
       ${isOneWay ? '' : kpiCard({ label: 'Consumo de agua', value: k.agua, unit: 'm³', accent: '#3b82f6', delta: dAgua, tone: evalDelta(dAgua, { deltaGood: 'down' }) })}
       ${kpiCard({ label: 'Bebida producida', value: isOneWay ? owProdSum : k.produccion, unit: 'm³', accent: '#4ade80', delta: isOneWay ? dOwProd : dProd, tone: evalDelta(isOneWay ? dOwProd : dProd, { deltaGood: 'up' }) })}
-      ${isOneWay ? '' : kpiCard({ label: 'Ratio agua / bebida', value: k.ratio, unit: 'L/L', decimals: 2, accent: color, status: evalStatus(k.ratio, LINE_RATIO), delta: dRatio, tone: evalDelta(dRatio, LINE_RATIO), subtitle: `Meta ≤ ${fmt(LINE_RATIO.ok, 1)} L/L` })}
+      ${(isOneWay || isLinea10) ? '' : kpiCard({ label: 'Ratio agua / bebida', value: k.ratio, unit: 'L/L', decimals: 2, accent: color, status: evalStatus(k.ratio, LINE_RATIO), delta: dRatio, tone: evalDelta(dRatio, LINE_RATIO), subtitle: `Meta ≤ ${fmt(LINE_RATIO.ok, 1)} L/L` })}
       ${kpiCard({
         label: 'Día de mayor consumo',
         value: isOneWay ? (owPeak && owPeak.val > 0 ? owPeak.val : null) : (peakIdx >= 0 ? aguaDaily[peakIdx] : null),
