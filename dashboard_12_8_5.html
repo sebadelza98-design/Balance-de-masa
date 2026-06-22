@@ -410,24 +410,19 @@ input, select { font: inherit; }
 .data-table tbody tr:hover { background: var(--surface-hover); }
 .data-table td.num, .data-table th.num { text-align: right; }
 
-/* Mini tabla compacta (p. ej. BP vs Real) — no usa el ancho mínimo de .data-table */
-.mini-table { border-collapse: collapse; font-size: 14px; }
-.mini-table th {
-  text-align: left;
-  padding: 10px 20px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--text-dim);
-  font-weight: 600;
-  letter-spacing: 0.3px;
+/* Tarjeta KPI comparativa BP vs Real (mismo aspecto que las demás .kpi-card) */
+.bp-kpi-rows { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.bp-kpi-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--border-soft);
 }
-.mini-table td {
-  padding: 10px 20px;
-  border: 1px solid var(--border);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
+.bp-kpi-row:last-child { border-bottom: none; padding-bottom: 0; }
+.bp-kpi-name { font-size: 13px; font-weight: 600; color: var(--text-dim); }
+.bp-kpi-num { font-size: 24px; font-weight: 700; letter-spacing: 0.3px; font-variant-numeric: tabular-nums; }
 
 .row-label { display: flex; align-items: center; gap: 9px; font-weight: 500; }
 .row-swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; }
@@ -1312,25 +1307,24 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
   const prodSum = sum(RECS.map(totalProduccion));
   const zonaReal = safeDiv(zonaSum, prodSum);
   const zonaColor = zonaReal === null ? 'var(--text)' : (zonaReal <= ZONA_HUMEDA_BP ? 'var(--ok)' : 'var(--bad)');
-  const zonaTableCard = chartCard({
-    span: 4,
-    title: 'Zona húmeda · BP vs Real',
-    subtitle: 'Real = zona húmeda ÷ producción total (L1–L12 + PMIX) · período seleccionado',
-    body: `<div class="table-wrap"><table class="mini-table"><tbody>
-        <tr><th>BP</th><td class="num">${fmt(ZONA_HUMEDA_BP, 3)}</td></tr>
-        <tr><th>real</th><td class="num"><span style="color:${zonaColor}">${fmt(zonaReal, 3)}</span></td></tr>
-      </tbody></table></div>`,
-  });
+  const zonaKpiCard = `<div class="kpi-card" style="--kpi-accent:#22d3ee">
+      <div class="kpi-head"><span class="kpi-label">Zona húmeda · BP vs Real</span></div>
+      <div class="bp-kpi-rows">
+        <div class="bp-kpi-row"><span class="bp-kpi-name">BP</span><span class="bp-kpi-num">${fmt(ZONA_HUMEDA_BP, 3)}</span></div>
+        <div class="bp-kpi-row"><span class="bp-kpi-name">real</span><span class="bp-kpi-num" style="color:${zonaColor}">${fmt(zonaReal, 3)}</span></div>
+      </div>
+      <div class="kpi-foot"><span class="kpi-target">zona húmeda ÷ producción total (L1–L12 + PMIX)</span></div>
+    </div>`;
 
   root.innerHTML = `
     ${pageHeader(title, subtitle)}
     <div class="kpi-grid">
+      ${isOneWay ? zonaKpiCard : ''}
       ${isOneWay ? '' : kpiCard({ label: 'Consumo de agua', value: k.agua, unit: 'm³', accent: '#3b82f6', delta: dAgua, tone: evalDelta(dAgua, { deltaGood: 'down' }) })}
       ${kpiCard({ label: 'Bebida producida', value: k.produccion, unit: 'm³', accent: '#4ade80', delta: dProd, tone: evalDelta(dProd, { deltaGood: 'up' }) })}
       ${isOneWay ? '' : kpiCard({ label: 'Ratio agua / bebida', value: k.ratio, unit: 'L/L', decimals: 2, accent: color, status: evalStatus(k.ratio, LINE_RATIO), delta: dRatio, tone: evalDelta(dRatio, LINE_RATIO), subtitle: `Meta ≤ ${fmt(LINE_RATIO.ok, 1)} L/L` })}
       ${kpiCard({ label: 'Día de mayor consumo', value: peakIdx >= 0 ? aguaDaily[peakIdx] : null, unit: 'm³', accent: '#fb923c', subtitle: peakIdx >= 0 ? fmtDayShort(RECS[peakIdx].date) : '—' })}
     </div>
-    ${isOneWay ? `<div class="chart-grid">${zonaTableCard}</div>` : ''}
     <div class="chart-grid">
       ${chartCard({ span: isOneWay ? 12 : 7, title: 'Tendencia diaria', subtitle: 'Consumo de agua y producción (m³/día)', canvasId: 'ch-daily' })}
       ${isOneWay ? '' : chartCard({ span: 5, title: 'Ratio diario agua / bebida', subtitle: `Meta ≤ ${fmt(LINE_RATIO.ok, 1)} L/L`, canvasId: 'ch-ratio' })}
