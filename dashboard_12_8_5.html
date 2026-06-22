@@ -817,11 +817,14 @@ function buildDay(iso) {
     },
   };
 
-  // One Way: producción de las líneas L6+L7+L8+L9+L12+PMIX (en mock, la línea oneWay)
+  // One Way: producción de las líneas L6+L7+L8+L9+L12+PMIX (en mock, repartida)
   const owProduccion = round1(lineas.oneWay ? lineas.oneWay.produccion : produccionTotal * 0.4);
+  const OW_SHARES = { l6: 0.3, l9: 0.28, l12: 0.25, l7: 0.08, pmix: 0.05, l8: 0.04 };
+  const owLineas = {};
+  for (const id in OW_SHARES) owLineas[id] = round1(owProduccion * OW_SHARES[id] * noise(0.6));
   const zonaHumeda = round1(produccionTotal * 0.05 * improvement * noise(0.22));
 
-  return { date: iso, zonaHumeda, owProduccion, pozos, nano, wur, ro, cip: { cip: round1(cipVal), enjuague: round1(enjuague) }, lineas, servicios, aguaPotable, elaboracion };
+  return { date: iso, zonaHumeda, owProduccion, owLineas, pozos, nano, wur, ro, cip: { cip: round1(cipVal), enjuague: round1(enjuague) }, lineas, servicios, aguaPotable, elaboracion };
 }
 
 const AVAILABLE = { min: MIN_DATE, max: todayISO() };
@@ -1308,6 +1311,17 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
   const owProdSum = sum(RECS.map((r) => r.owProduccion ?? 0));
   const owProdPrev = sum(PREV.map((r) => r.owProduccion ?? 0));
   const dOwProd = deltaPct(owProdSum, owProdPrev);
+  // Día de mayor producción One Way y la línea que lo lideró (máx producción línea·día)
+  let owPeak = null; // { date, line, val }
+  if (isOneWay) {
+    for (const r of RECS) {
+      const lines = r.owLineas || {};
+      for (const id of OW_PROD_LINES) {
+        const v = lines[id] ?? 0;
+        if (owPeak === null || v > owPeak.val) owPeak = { date: r.date, line: id, val: v };
+      }
+    }
+  }
   // Indicador Zona húmeda (solo One Way): Real = Σ zona húmeda ÷ Σ producción total (todas las líneas: L1–L12 + PMIX)
   const zonaSum = sum(RECS.map((r) => r.zonaHumeda ?? 0));
   const prodSum = sum(RECS.map(totalProduccion));
@@ -1329,7 +1343,14 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
       ${isOneWay ? '' : kpiCard({ label: 'Consumo de agua', value: k.agua, unit: 'm³', accent: '#3b82f6', delta: dAgua, tone: evalDelta(dAgua, { deltaGood: 'down' }) })}
       ${kpiCard({ label: 'Bebida producida', value: isOneWay ? owProdSum : k.produccion, unit: 'm³', accent: '#4ade80', delta: isOneWay ? dOwProd : dProd, tone: evalDelta(isOneWay ? dOwProd : dProd, { deltaGood: 'up' }) })}
       ${isOneWay ? '' : kpiCard({ label: 'Ratio agua / bebida', value: k.ratio, unit: 'L/L', decimals: 2, accent: color, status: evalStatus(k.ratio, LINE_RATIO), delta: dRatio, tone: evalDelta(dRatio, LINE_RATIO), subtitle: `Meta ≤ ${fmt(LINE_RATIO.ok, 1)} L/L` })}
-      ${kpiCard({ label: 'Día de mayor consumo', value: peakIdx >= 0 ? aguaDaily[peakIdx] : null, unit: 'm³', accent: '#fb923c', subtitle: peakIdx >= 0 ? fmtDayShort(RECS[peakIdx].date) : '—' })}
+      ${kpiCard({
+        label: 'Día de mayor consumo',
+        value: isOneWay ? (owPeak && owPeak.val > 0 ? owPeak.val : null) : (peakIdx >= 0 ? aguaDaily[peakIdx] : null),
+        unit: 'm³', accent: '#fb923c',
+        subtitle: isOneWay
+          ? (owPeak && owPeak.val > 0 ? `${fmtDayShort(owPeak.date)} · ${owPeak.line.toUpperCase()}` : '—')
+          : (peakIdx >= 0 ? fmtDayShort(RECS[peakIdx].date) : '—'),
+      })}
     </div>
     <div class="chart-grid">
       ${chartCard({ span: isOneWay ? 12 : 7, title: 'Tendencia diaria', subtitle: 'Consumo de agua y producción (m³/día)', canvasId: 'ch-daily' })}
@@ -1774,6 +1795,7 @@ function emptyRecord(date) {
     bebidaTotal: 0,
     zonaHumeda: 0,
     owProduccion: 0,
+    owLineas: {},
     pozos: { pozo1: 0, pozo2: 0, pozo3: 0, pozo1b: 0 },
     nano: { alimentacion: 0, rechazo: 0, permeado: 0 },
     wur: { alimentacion: 0, recuperada: 0 },
@@ -1948,9 +1970,9 @@ function metroscubToRecords(wb) {
   return [...map.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
-/* ─── Producción One Way: Σ(L6+L7+L8+L9+L12+PMIX) desde la hoja "Producciones" ───
+/* ─── Producción One Way (L6+L7+L8+L9+L12+PMIX) desde la hoja "Producciones" ───
    Layout transpuesto: fechas en una fila, líneas como etiquetas en la columna B.
-   Devuelve Map(fechaISO -> suma de producción One Way del día). */
+   Devuelve Map(fechaISO -> { total, lines: {l6, l7, l8, l9, l12, pmix} }). */
 const OW_PROD_LINES = ['l6', 'l7', 'l8', 'l9', 'l12', 'pmix'];
 function produccionesOwMap(wb) {
   const map = new Map();
@@ -1984,15 +2006,20 @@ function produccionesOwMap(wb) {
       if (OW_PROD_LINES.indexOf(lab) >= 0 && !(lab in labelRow)) labelRow[lab] = r;
     }
   }
-  const lineRows = OW_PROD_LINES.map((id) => labelRow[id]).filter((r) => r != null);
   for (const d of dateCols) {
     if (!d.iso) continue;
-    let s = 0;
-    for (const ri of lineRows) {
-      const v = (grid[ri] || [])[d.c];
-      if (typeof v === 'number' && isFinite(v)) s += v;
+    const lines = {}; let total = 0;
+    for (const id of OW_PROD_LINES) {
+      const ri = labelRow[id];
+      let v = 0;
+      if (ri != null) {
+        const cell = (grid[ri] || [])[d.c];
+        if (typeof cell === 'number' && isFinite(cell)) v = cell;
+      }
+      lines[id] = round1(v);
+      total += v;
     }
-    map.set(d.iso, round1(s));
+    map.set(d.iso, { total: round1(total), lines });
   }
   return map;
 }
@@ -2081,7 +2108,10 @@ async function handleFile(e) {
         if (!records.length) throw new Error('Hoja METROSCUB encontrada pero sin fechas válidas en la fila de fechas.');
         // Producción One Way (L6+L7+L8+L9+L12+PMIX) desde la hoja "Producciones"
         const owMap = produccionesOwMap(wb);
-        if (owMap.size) records.forEach((r) => { r.owProduccion = owMap.get(r.date) ?? 0; });
+        if (owMap.size) records.forEach((r) => {
+          const e = owMap.get(r.date);
+          if (e) { r.owProduccion = e.total; r.owLineas = e.lines; }
+        });
       } else {
         const ws = wb.Sheets[wb.SheetNames[0]];
         records = aoaToRecords(XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, blankrows: false, defval: '' }));
