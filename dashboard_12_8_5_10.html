@@ -1457,12 +1457,14 @@ function renderServicios(root) {
   const totals = SERVICIOS.map((s) => ({ ...s, agua: round1(sum(RECS.map((r) => r.servicios[s.id]))) }));
   const prevTotals = SERVICIOS.map((s) => ({ ...s, agua: round1(sum(PREV.map((r) => r.servicios[s.id]))) }));
   const total = sum(totals.map((t) => t.agua));
-  const totalPrev = sum(prevTotals.map((t) => t.agua));
   totals.forEach((t) => (t.pct = total > 0 ? (t.agua / total) * 100 : 0));
   const byId = (arr, id) => arr.find((x) => x.id === id);
-  const dTotal = deltaPct(total, totalPrev);
+  // Otros servicios (Agua de Limpieza): se respalda con el campo 'otros' del modelo de datos
+  const otrosTot = round1(sum(RECS.map((r) => r.servicios.otros ?? 0)));
+  const otrosPrev = round1(sum(PREV.map((r) => r.servicios.otros ?? 0)));
+  const dOtros = deltaPct(otrosTot, otrosPrev);
 
-  const kpiCards = ['torres', 'caldera1', 'caldera2', 'cip'].map((id) => {
+  const kpiCards = ['torres', 'caldera1', 'caldera2'].map((id) => {
     const t = byId(totals, id);
     const d = deltaPct(t.agua, byId(prevTotals, id)?.agua ?? null);
     return kpiCard({ label: t.nombre, value: t.agua, unit: 'm³', accent: t.color, delta: d, tone: evalDelta(d, { deltaGood: 'down' }) });
@@ -1471,8 +1473,9 @@ function renderServicios(root) {
   root.innerHTML = `
     ${pageHeader('Servicios Auxiliares', 'Torres de enfriamiento, calderas, CIP y otros servicios de planta')}
     <div class="kpi-grid">
-      ${kpiCard({ label: 'Consumo total servicios', value: total, unit: 'm³', accent: '#22d3ee', delta: dTotal, tone: evalDelta(dTotal, { deltaGood: 'down' }) })}
+      ${kpiCard({ label: 'Otros servicios (Agua de Limpieza)', value: otrosTot, unit: 'm³', accent: '#22d3ee', delta: dOtros, tone: evalDelta(dOtros, { deltaGood: 'down' }) })}
       ${kpiCards}
+      ${kpiCard({ label: 'Condensadores', value: 0, unit: 'm³', accent: '#a78bfa', showDelta: false, subtitle: 'Sin datos cargados' })}
     </div>
     <div class="chart-grid">
       ${chartCard({ span: 7, title: 'Consumo diario por servicio', subtitle: 'Series apiladas (m³/día)', canvasId: 'ch-daily', height: 310 })}
