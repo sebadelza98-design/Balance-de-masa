@@ -1313,19 +1313,16 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
 
   const aguaDaily = RECS.map((r) => r.lineas[lineId].agua);
   const prodDaily = RECS.map((r) => r.lineas[lineId].produccion);
-  const ratioDaily = RECS.map((r) => {
-    const l = r.lineas[lineId];
-    return l.produccion > 0 ? +(l.agua / l.produccion).toFixed(2) : null;
-  });
   const peakIdx = aguaDaily.indexOf(Math.max(...aguaDaily));
 
-  // "Bebida producida" One Way = Σ producción de L6+L7+L8+L9+L12+PMIX (hoja Producciones)
-  const owProdSum = sum(RECS.map((r) => r.owProduccion ?? 0));
-  const owProdPrev = sum(PREV.map((r) => r.owProduccion ?? 0));
-  const dOwProd = deltaPct(owProdSum, owProdPrev);
-  // Día de mayor producción One Way y la línea que lo lideró (máx producción línea·día)
-  let owPeak = null; // { date, line, val }
+  // KPIs y datos exclusivos de One Way (solo se calculan en esa pestaña)
+  let zonaKpiCard = '', owProdSum = 0, dOwProd = null, owPeak = null; // owPeak: { date, line, val }
   if (isOneWay) {
+    // "Bebida producida" One Way = Σ producción de L6+L7+L8+L9+L12+PMIX (hoja Producciones)
+    owProdSum = sum(RECS.map((r) => r.owProduccion ?? 0));
+    const owProdPrev = sum(PREV.map((r) => r.owProduccion ?? 0));
+    dOwProd = deltaPct(owProdSum, owProdPrev);
+    // Día de mayor producción One Way y la línea que lo lideró (máx producción línea·día)
     for (const r of RECS) {
       const lines = r.prodLineas || {};
       for (const id of OW_PROD_LINES) {
@@ -1333,13 +1330,12 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
         if (owPeak === null || v > owPeak.val) owPeak = { date: r.date, line: id, val: v };
       }
     }
-  }
-  // Indicador Zona húmeda (solo One Way): Real = Σ zona húmeda ÷ Σ producción total (todas las líneas: L1–L12 + PMIX)
-  const zonaSum = sum(RECS.map((r) => r.zonaHumeda ?? 0));
-  const prodSum = sum(RECS.map(totalProduccion));
-  const zonaReal = safeDiv(zonaSum, prodSum);
-  const zonaColor = zonaReal === null ? 'var(--text)' : (zonaReal <= ZONA_HUMEDA_BP ? 'var(--ok)' : 'var(--bad)');
-  const zonaKpiCard = `<div class="kpi-card" style="--kpi-accent:#22d3ee">
+    // Indicador Zona húmeda: Real = Σ zona húmeda ÷ Σ producción total (todas las líneas: L1–L12 + PMIX)
+    const zonaSum = sum(RECS.map((r) => r.zonaHumeda ?? 0));
+    const prodSum = sum(RECS.map(totalProduccion));
+    const zonaReal = safeDiv(zonaSum, prodSum);
+    const zonaColor = zonaReal === null ? 'var(--text)' : (zonaReal <= ZONA_HUMEDA_BP ? 'var(--ok)' : 'var(--bad)');
+    zonaKpiCard = `<div class="kpi-card" style="--kpi-accent:#22d3ee">
       <div class="kpi-head"><span class="kpi-label">Zona húmeda · BP vs Real</span></div>
       <div class="bp-kpi-rows">
         <div class="bp-kpi-row"><span class="bp-kpi-name">BP</span><span class="bp-kpi-num">${fmt(ZONA_HUMEDA_BP, 3)}</span></div>
@@ -1347,13 +1343,17 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
       </div>
       <div class="kpi-foot"><span class="kpi-target">zona húmeda ÷ producción total (L1–L12 + PMIX)</span></div>
     </div>`;
+  }
 
-  // Indicador Línea 10 (merma): Real = (Enviado L10 − Producción L10 − Enviado L11) ÷ Σ(L1–L12 + PMIX)
-  const l10Num = sum(RECS.map((r) => (r.enviadoL10 ?? 0) - ((r.prodLineas && r.prodLineas.l10) || 0) - (r.enviadoL11 ?? 0)));
-  const l10Div = sum(RECS.map((r) => r.prodAllLines ?? 0));
-  const l10Real = safeDiv(l10Num, l10Div);
-  const l10Color = l10Real === null ? 'var(--text)' : (l10Real <= LINEA10_BP ? 'var(--ok)' : 'var(--bad)');
-  const linea10KpiCard = `<div class="kpi-card" style="--kpi-accent:#a78bfa">
+  // KPI exclusivo de Línea 10 (merma) — solo se calcula en esa pestaña
+  let linea10KpiCard = '';
+  if (isLinea10) {
+    // Real = (Enviado L10 − Producción L10 − Enviado L11) ÷ Σ(L1–L12 + PMIX)
+    const l10Num = sum(RECS.map((r) => (r.enviadoL10 ?? 0) - ((r.prodLineas && r.prodLineas.l10) || 0) - (r.enviadoL11 ?? 0)));
+    const l10Div = sum(RECS.map((r) => r.prodAllLines ?? 0));
+    const l10Real = safeDiv(l10Num, l10Div);
+    const l10Color = l10Real === null ? 'var(--text)' : (l10Real <= LINEA10_BP ? 'var(--ok)' : 'var(--bad)');
+    linea10KpiCard = `<div class="kpi-card" style="--kpi-accent:#a78bfa">
       <div class="kpi-head"><span class="kpi-label">Línea 10 · BP vs Real</span></div>
       <div class="bp-kpi-rows">
         <div class="bp-kpi-row"><span class="bp-kpi-name">BP</span><span class="bp-kpi-num">${fmt(LINEA10_BP, 3)}</span></div>
@@ -1361,12 +1361,13 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
       </div>
       <div class="kpi-foot"><span class="kpi-target">(Env. L10 − Prod. L10 − Env. L11) ÷ Σ(L1–L12 + PMIX)</span></div>
     </div>`;
+  }
 
   root.innerHTML = `
     ${pageHeader(title, subtitle)}
     <div class="kpi-grid">
-      ${isOneWay ? zonaKpiCard : ''}
-      ${isLinea10 ? linea10KpiCard : ''}
+      ${zonaKpiCard}
+      ${linea10KpiCard}
       ${isOneWay ? '' : kpiCard({ label: 'Consumo de agua', value: k.agua, unit: 'm³', accent: '#3b82f6', delta: dAgua, tone: evalDelta(dAgua, { deltaGood: 'down' }) })}
       ${kpiCard({ label: 'Bebida producida', value: isOneWay ? owProdSum : k.produccion, unit: 'm³', accent: '#4ade80', delta: isOneWay ? dOwProd : dProd, tone: evalDelta(isOneWay ? dOwProd : dProd, { deltaGood: 'up' }) })}
       ${isOneWay ? '' : kpiCard({ label: 'Ratio agua / bebida', value: k.ratio, unit: 'L/L', decimals: 2, accent: color, status: evalStatus(k.ratio, LINE_RATIO), delta: dRatio, tone: evalDelta(dRatio, LINE_RATIO), subtitle: `Meta ≤ ${fmt(LINE_RATIO.ok, 1)} L/L` })}
@@ -1387,9 +1388,10 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
       ${(isOneWay || isLinea10) ? '' : chartCard({ span: 12, title: 'Comparación histórica mensual', subtitle: 'Totales mensuales · últimos 12 meses', canvasId: 'ch-hist' })}
     </div>`;
 
+  const dailyLabels = dayLabels();
   makeChart('ch-daily', {
     type: 'line',
-    data: { labels: dayLabels(), datasets: [
+    data: { labels: dailyLabels, datasets: [
       lineDataset('Agua (m³)', aguaDaily, '#3b82f6'),
       lineDataset('Producción (m³)', prodDaily, '#4ade80'),
     ]},
@@ -1397,9 +1399,13 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
   });
 
   if (!isOneWay && !isLinea10) {
+    const ratioDaily = RECS.map((r) => {
+      const l = r.lineas[lineId];
+      return l.produccion > 0 ? +(l.agua / l.produccion).toFixed(2) : null;
+    });
     makeChart('ch-ratio', {
       type: 'line',
-      data: { labels: dayLabels(), datasets: [
+      data: { labels: dailyLabels, datasets: [
         lineDataset('Ratio (L/L)', ratioDaily, color),
         metaDataset(LINE_RATIO.ok, ratioDaily.length, `Meta ${fmt(LINE_RATIO.ok, 1)}`),
       ]},
@@ -1408,7 +1414,7 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
 
     makeChart('ch-cum', {
       type: 'line',
-      data: { labels: dayLabels(), datasets: [
+      data: { labels: dailyLabels, datasets: [
         lineDataset('Agua acumulada', cumulative(aguaDaily), '#3b82f6', { fillArea: true }),
         lineDataset('Producción acumulada', cumulative(prodDaily), '#4ade80', { fillArea: true }),
       ]},
