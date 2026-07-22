@@ -14,9 +14,9 @@
   navegador moderno. No requiere internet, npm ni servidor (Chart.js
   va embebido más abajo).
 
-  · Datos: simulados (mock) deterministas, para validar diseño y
-    navegación. La función getDailyRecords() es el único punto a
-    reemplazar para conectar los Excel mensuales reales.
+  · Datos: el dashboard abre vacío (todos los indicadores en «—»).
+    Los datos se cargan con el botón «Cargar Excel» (hoja METROSCUB
+    del Mapa de Agua mensual, o la plantilla plana).
   · Versión mantenible/escalable del mismo dashboard: carpeta
     dashboard/ del repositorio (React + Vite + Recharts).
 
@@ -62,6 +62,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
@@ -486,7 +487,7 @@ input, select { font: inherit; }
       <button id="burger" class="header-burger" aria-label="Abrir menú">☰</button>
       <div class="header-title">
         Planta de agua Coca-Cola Andina
-        <small id="src-label">Fuente de datos: simulada (mock) · archivo único</small>
+        <small id="src-label">Fuente de datos: sin datos · cargue el Excel del Mapa de Agua</small>
       </div>
       <div class="filters">
         <div class="filter-field">
@@ -501,7 +502,7 @@ input, select { font: inherit; }
           <input id="xlsx-input" type="file" accept=".xlsx,.xls,.csv" hidden />
           <button id="btn-load" class="ds-btn ds-btn-primary" title="Cargar datos desde un archivo Excel o CSV">Cargar Excel</button>
           <button id="btn-template" class="ds-btn" title="Descargar plantilla con el formato esperado">Plantilla</button>
-          <button id="btn-mock" class="ds-btn ds-btn-ghost" title="Volver a los datos simulados" hidden>Datos demo</button>
+          <button id="btn-mock" class="ds-btn ds-btn-ghost" title="Quitar los datos cargados" hidden>Quitar datos</button>
         </div>
         <div class="last-update" title="Última actualización de datos">
           <span id="src-dot" class="pulse-dot"></span>
@@ -550,6 +551,9 @@ input, select { font: inherit; }
 const _nf = {};
 function fmt(value, decimals = 0) {
   if (value === null || value === undefined || Number.isNaN(value)) return '—';
+  // Sin archivo cargado no existe ningún dato: todo valor calculado es un 0
+  // proveniente de sumas vacías y debe leerse como «sin dato».
+  if (value === 0 && EXCEL_DATA === null) return '—';
   const key = 'd' + decimals;
   _nf[key] ??= new Intl.NumberFormat('es-CL', {
     minimumFractionDigits: decimals,
@@ -843,14 +847,14 @@ const AVAILABLE = { min: MIN_DATE, max: todayISO() };
 /* Datos cargados desde Excel/CSV (Map<iso, DailyRecord>). null = datos simulados. */
 let EXCEL_DATA = null;
 
-/** Capa de datos: simulada (buildDay) o, si hay archivo cargado, lo real. */
+/** Capa de datos: solo lo cargado desde Excel/CSV. Sin archivo no hay datos
+    (el dashboard muestra «—» en todos los indicadores). */
 function getDailyRecords(start, end) {
+  if (!EXCEL_DATA) return [];
   const from = clampISO(start, AVAILABLE.min, AVAILABLE.max);
   const to = clampISO(end, AVAILABLE.min, AVAILABLE.max);
   if (from > to) return [];
-  const days = dateRange(from, to);
-  if (EXCEL_DATA) return days.map((iso) => EXCEL_DATA.get(iso)).filter(Boolean);
-  return days.map(buildDay);
+  return dateRange(from, to).map((iso) => EXCEL_DATA.get(iso)).filter(Boolean);
 }
 
 /* ════════════════ 6. Transformaciones / KPIs ════════════════ */
@@ -1075,6 +1079,7 @@ function statusPill(status) {
   return `<span class="status-pill ${status}"><span class="status-dot ${status}"></span>${lbl}</span>`;
 }
 function kpiCard({ label, value, unit, decimals = 0, accent = '#0891b2', status = null, delta = null, tone = 'neutral', subtitle = '', showDelta = true, statusText = false }) {
+  if (!EXCEL_DATA) { value = null; status = null; delta = null; tone = 'neutral'; }
   const headDot = (status && !statusText) ? `<span class="status-dot ${status}"></span>` : '';
   const foot = (statusText && status) ? statusPill(status) : (showDelta ? deltaBadge(delta, tone) : '');
   return `<div class="kpi-card" style="--kpi-accent:${accent}">
@@ -1148,7 +1153,7 @@ const dayLabels = () => RECS.map((r) => fmtDayShort(r.date));
 const KPI_ORDER = ['ratioAgua','produccion','consumoPozos','consumoNano','rechazoNano','recuperacionWUR','eficienciaRO'];
 
 function renderPlanta(root) {
-  const kpis = computePlantKpis(RECS);
+  const kpis = computePlantKpis(RECS) ?? {};
   const dailyK = RECS.map((r) => computePlantKpis([r]));
   const ranking = consumerRanking(RECS);
 
@@ -2116,7 +2121,7 @@ function revertToMock() {
   syncFilterInputs();
   renderNav();
   renderPage();
-  setSource('simulada (mock) · archivo único', false);
+  setSource('sin datos · cargue el Excel del Mapa de Agua', false);
   document.getElementById('btn-mock').hidden = true;
   document.getElementById('xlsx-input').value = '';
 }
