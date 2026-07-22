@@ -666,6 +666,7 @@ const LINE_RATIO = { direction: 'below', ok: 1.9, warn: 2.4 };
 const LINE_BP_FACTOR = 0.14;  // factor de presupuesto (BP) por línea, igual para las 6 líneas
 const ZONA_HUMEDA_BP = 0.05;  // presupuesto (BP) zona húmeda ÷ producción total (todas las líneas)
 const LINEA10_BP = 0.07;      // presupuesto (BP) merma L10 ÷ producción total (L1–L12 + PMIX)
+const POTABLE_BP = 0.05;      // presupuesto (BP) agua potable 25% ÷ producción total (L1–L12 + PMIX)
 // Líneas de producción de la hoja "Producciones" (todas y subconjunto One Way)
 const PROD_LINES_ALL = ['l1', 'l2', 'l3', 'l4', 'l5', 'l6', 'l7', 'l8', 'l9', 'l10', 'l11', 'l12', 'pmix'];
 const OW_PROD_LINES = ['l6', 'l7', 'l8', 'l9', 'l12', 'pmix'];
@@ -1168,9 +1169,24 @@ function renderPlanta(root) {
 
   const kpiOptions = KPI_ORDER.map((k) => `<option value="${k}">${KPI_DEFS[k].label}</option>`).join('');
 
+  // Agua Potable · BP vs Real: Σ «Agua potable 25%» (hoja Pozos, col. P) del
+  // período ÷ Σ producción L1–L12 + PMIX (hoja Producciones) del período.
+  const potSum = sum(RECS.map((r) => r.aguaPotable.consumo));
+  const prodAllSum = sum(RECS.map((r) => r.prodAllLines ?? 0));
+  const potReal = safeDiv(potSum, prodAllSum);
+  const potColor = potReal === null ? 'var(--text)' : (potReal <= POTABLE_BP ? 'var(--ok)' : 'var(--bad)');
+  const potableBpCard = `<div class="kpi-card" style="--kpi-accent:#14b8a6">
+    <div class="kpi-head"><span class="kpi-label">Agua Potable · BP vs Real</span></div>
+    <div class="bp-kpi-rows">
+      <div class="bp-kpi-row"><span class="bp-kpi-name">BP</span><span class="bp-kpi-num">${fmt(POTABLE_BP, 3)}</span></div>
+      <div class="bp-kpi-row"><span class="bp-kpi-name">real</span><span class="bp-kpi-num" style="color:${potColor}">${fmt(potReal, 3)}</span></div>
+    </div>
+    <div class="kpi-foot"><span class="kpi-target">agua potable 25% ÷ producción L1–L12 + PMIX</span></div>
+  </div>`;
+
   root.innerHTML = `
     ${pageHeader('Planta General', 'Balance hídrico global: captación, tratamiento, producción y servicios')}
-    <div class="kpi-grid">${cards}</div>
+    <div class="kpi-grid">${cards}${potableBpCard}</div>
     <div class="chart-grid">
       ${chartCard({ span: 12, title: 'Tendencia diaria del indicador', subtitle: 'Comportamiento día a día dentro del período', canvasId: 'ch-trend', actions: `<select id="sel-kpi">${kpiOptions}</select>` })}
       ${chartCard({ span: 12, title: 'Distribución del consumo', subtitle: 'Participación por consumidor en el período', canvasId: 'ch-donut' })}
@@ -1695,7 +1711,6 @@ const PAGES = {
   oneway: { label: 'One Way', icon: '🧴', group: 'Líneas de producción',
     render: (root) => renderLineDetail(root, { lineId: 'oneWay', title: 'Línea One Way', subtitle: 'Envasado no retornable (PET / lata) · incluye indicador de Línea 10', color: LINEA_ONE_WAY.color }) },
   servicios: { label: 'Servicios', icon: '⚙️', group: 'Áreas de soporte', render: renderServicios },
-  potable: { label: 'Agua Potable', icon: '🚰', group: 'Áreas de soporte', render: renderPotable },
   elaboracion: { label: 'Elaboración', icon: '🧪', group: 'Áreas de soporte', render: renderElaboracion },
 };
 
@@ -2077,6 +2092,45 @@ function produccionesLineMap(wb) {
   return map;
 }
 
+/* ─── Agua potable 25% desde la hoja "Pozos" ───
+   Layout: fechas en una columna (C) y encabezados en las primeras filas;
+   se busca la columna cuyo encabezado diga «Agua potable 25%».
+   Devuelve Map(fechaISO -> m³ del día, negativos tratados como 0). */
+function pozosPotableMap(wb) {
+  const map = new Map();
+  const ws = wb.Sheets['Pozos'];
+  if (!ws) return map;
+  const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, blankrows: true, defval: null });
+  // columna de fechas = la que tiene más celdas Date
+  let dateColIdx = -1, best = 0;
+  const maxCols = grid.reduce((m, r) => Math.max(m, (r || []).length), 0);
+  for (let c = 0; c < maxCols; c++) {
+    let cnt = 0;
+    for (const row of grid) if (row && row[c] instanceof Date && !isNaN(row[c])) cnt++;
+    if (cnt > best) { best = cnt; dateColIdx = c; }
+  }
+  if (dateColIdx < 0 || best < 3) return map;
+  // columna «Agua potable 25%» buscada en las primeras filas de encabezado
+  let potCol = -1;
+  for (let r = 0; r < Math.min(grid.length, 8) && potCol < 0; r++) {
+    const row = grid[r] || [];
+    for (let c = 0; c < row.length; c++) {
+      if (normLabel(row[c]).includes('agua potable 25')) { potCol = c; break; }
+    }
+  }
+  if (potCol < 0) return map;
+  for (const row of grid) {
+    if (!row) continue;
+    const d = row[dateColIdx];
+    if (!(d instanceof Date) || isNaN(d)) continue;
+    const iso = toISODate(d);
+    if (!iso) continue;
+    const v = row[potCol];
+    map.set(iso, typeof v === 'number' && isFinite(v) ? Math.max(0, v) : 0);
+  }
+  return map;
+}
+
 function setSource(text, isFile) {
   const el = document.getElementById('src-label');
   if (el) el.textContent = 'Fuente de datos: ' + text;
@@ -2164,6 +2218,12 @@ async function handleFile(e) {
         if (lineMap.size) records.forEach((r) => {
           const e = lineMap.get(r.date);
           if (e) { r.prodLineas = e.lines; r.prodAllLines = e.total; r.owProduccion = e.ow; }
+        });
+        // Agua potable 25% diaria desde la hoja "Pozos" (columna «Agua potable 25%»)
+        const potMap = pozosPotableMap(wb);
+        if (potMap.size) records.forEach((r) => {
+          const v = potMap.get(r.date);
+          if (v !== undefined) r.aguaPotable.consumo = round1(v);
         });
       } else {
         const ws = wb.Sheets[wb.SheetNames[0]];
