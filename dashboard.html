@@ -4,11 +4,11 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="description" content="Dashboard de monitoreo operacional y consumo de agua de planta industrial — archivo único autocontenido" />
-<title>AquaPlant · Monitoreo Planta de Agua</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%2322d3ee' d='M12 2C7.5 8.5 5 12.3 5 15a7 7 0 0 0 14 0c0-2.7-2.5-6.5-7-13z'/%3E%3C/svg%3E" />
+<title>Planta de agua Coca-Cola Andina</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%230891b2' d='M12 2C7.5 8.5 5 12.3 5 15a7 7 0 0 0 14 0c0-2.7-2.5-6.5-7-13z'/%3E%3C/svg%3E" />
 <!--
   ════════════════════════════════════════════════════════════════════
-  AquaPlant · Dashboard de Monitoreo de Planta de Agua (standalone)
+  Planta de agua Coca-Cola Andina · Dashboard de Monitoreo (standalone)
   ════════════════════════════════════════════════════════════════════
   Archivo ÚNICO y AUTOCONTENIDO: ábrelo con doble clic en cualquier
   navegador moderno. No requiere internet, npm ni servidor (Chart.js
@@ -26,39 +26,39 @@
 -->
 <style>
 /* ════════════════════════════════════════════════════════════════
-   AquaPlant (standalone) · tema industrial oscuro
+   Planta de agua Coca-Cola Andina (standalone) · tema claro
    ════════════════════════════════════════════════════════════════ */
 :root {
-  --bg: #0b1220;
-  --bg-soft: #0e1628;
-  --surface: #131c30;
-  --surface-2: #18233b;
-  --surface-hover: #1c2942;
-  --border: #233150;
-  --border-soft: #1b2742;
+  --bg: #f6f4ef;
+  --bg-soft: #efede6;
+  --surface: #ffffff;
+  --surface-2: #f4f2ec;
+  --surface-hover: #ece9e1;
+  --border: #d9d5c9;
+  --border-soft: #e5e2d8;
 
-  --text: #e6edf7;
-  --text-dim: #93a4c3;
-  --text-faint: #5d6f93;
+  --text: #1f2a37;
+  --text-dim: #5b6779;
+  --text-faint: #8b94a3;
 
-  --accent: #22d3ee;
-  --accent-2: #3b82f6;
-  --accent-soft: rgba(34, 211, 238, 0.12);
+  --accent: #0e7490;
+  --accent-2: #1d4ed8;
+  --accent-soft: rgba(14, 116, 144, 0.10);
 
-  --ok: #22c55e;
-  --warn: #f59e0b;
-  --bad: #ef4444;
-  --ok-soft: rgba(34, 197, 94, 0.14);
-  --warn-soft: rgba(245, 158, 11, 0.14);
-  --bad-soft: rgba(239, 68, 68, 0.14);
+  --ok: #15803d;
+  --warn: #b45309;
+  --bad: #b91c1c;
+  --ok-soft: rgba(21, 128, 61, 0.12);
+  --warn-soft: rgba(180, 83, 9, 0.12);
+  --bad-soft: rgba(185, 28, 28, 0.12);
 
   --sidebar-w: 232px;
   --radius: 12px;
   --radius-sm: 8px;
-  --shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  --shadow: 0 2px 10px rgba(31, 42, 55, 0.08);
 
   font-family: 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', sans-serif;
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -111,7 +111,7 @@ input, select { font: inherit; }
   position: fixed;
   inset: 0 auto 0 0;
   width: var(--sidebar-w);
-  background: linear-gradient(180deg, #0d1626 0%, #0a111f 100%);
+  background: linear-gradient(180deg, #fbfaf7 0%, #f3f1ea 100%);
   border-right: 1px solid var(--border-soft);
   display: flex;
   flex-direction: column;
@@ -129,8 +129,8 @@ input, select { font: inherit; }
   width: 36px; height: 36px;
   border-radius: 10px;
   display: grid; place-items: center;
-  background: linear-gradient(135deg, rgba(34, 211, 238, 0.18), rgba(59, 130, 246, 0.18));
-  border: 1px solid rgba(34, 211, 238, 0.35);
+  background: linear-gradient(135deg, rgba(8, 145, 178, 0.18), rgba(59, 130, 246, 0.18));
+  border: 1px solid rgba(8, 145, 178, 0.35);
   font-size: 18px;
 }
 .sidebar-brand .name { font-size: 15px; font-weight: 700; letter-spacing: 0.3px; }
@@ -165,7 +165,7 @@ input, select { font: inherit; }
 }
 .nav-item .nav-icon { width: 20px; text-align: center; font-size: 15px; }
 .nav-item:hover { background: var(--surface-hover); color: var(--text); }
-.nav-item.active { background: var(--accent-soft); color: var(--accent); border-color: rgba(34, 211, 238, 0.25); }
+.nav-item.active { background: var(--accent-soft); color: var(--accent); border-color: rgba(8, 145, 178, 0.25); }
 .sidebar-foot {
   padding: 14px 16px;
   border-top: 1px solid var(--border-soft);
@@ -185,7 +185,7 @@ input, select { font: inherit; }
   flex-wrap: wrap;
   gap: 12px 18px;
   padding: 10px 26px;
-  background: rgba(11, 18, 32, 0.85);
+  background: rgba(246, 244, 239, 0.88);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border-soft);
 }
@@ -219,7 +219,7 @@ input, select { font: inherit; }
   min-width: 120px;
 }
 .filter-field input:focus, .filter-field select:focus { border-color: var(--accent); }
-.filter-field input[type='date']::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
+.filter-field input[type='date']::-webkit-calendar-picker-indicator { cursor: pointer; }
 .last-update {
   display: flex;
   align-items: center;
@@ -239,9 +239,9 @@ input, select { font: inherit; }
   animation: pulse 2.2s infinite;
 }
 @keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55); }
-  70% { box-shadow: 0 0 0 7px rgba(34, 197, 94, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(21, 128, 61, 0.55); }
+  70% { box-shadow: 0 0 0 7px rgba(21, 128, 61, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(21, 128, 61, 0); }
 }
 .data-source { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ds-btn {
@@ -251,8 +251,8 @@ input, select { font: inherit; }
   white-space: nowrap; transition: border-color .15s, background .15s, color .15s;
 }
 .ds-btn:hover { border-color: var(--accent); background: var(--surface-hover); }
-.ds-btn-primary { background: var(--accent-soft); border-color: rgba(34, 211, 238, .35); color: var(--accent); font-weight: 600; }
-.ds-btn-primary:hover { background: rgba(34, 211, 238, .2); }
+.ds-btn-primary { background: var(--accent-soft); border-color: rgba(8, 145, 178, .35); color: var(--accent); font-weight: 600; }
+.ds-btn-primary:hover { background: rgba(8, 145, 178, .2); }
 .ds-btn-ghost { color: var(--text-dim); }
 .ds-status { flex-basis: 100%; font-size: 11.5px; color: var(--text-dim); }
 .ds-status:empty { display: none; }
@@ -318,9 +318,9 @@ input, select { font: inherit; }
 .delta.neutral { color: var(--text-dim); background: var(--surface-2); }
 
 .status-dot { width: 11px; height: 11px; border-radius: 50%; flex: none; display: inline-block; }
-.status-dot.ok { background: var(--ok); box-shadow: 0 0 8px rgba(34, 197, 94, 0.7); }
-.status-dot.warn { background: var(--warn); box-shadow: 0 0 8px rgba(245, 158, 11, 0.7); }
-.status-dot.bad { background: var(--bad); box-shadow: 0 0 8px rgba(239, 68, 68, 0.7); }
+.status-dot.ok { background: var(--ok); box-shadow: 0 0 8px rgba(21, 128, 61, 0.7); }
+.status-dot.warn { background: var(--warn); box-shadow: 0 0 8px rgba(180, 83, 9, 0.7); }
+.status-dot.bad { background: var(--bad); box-shadow: 0 0 8px rgba(185, 28, 28, 0.7); }
 
 .status-pill {
   display: inline-flex;
@@ -348,7 +348,7 @@ input, select { font: inherit; }
   min-width: 0;
 }
 .chart-card.primary {
-  border-color: rgba(34, 211, 238, 0.4);
+  border-color: rgba(8, 145, 178, 0.4);
   box-shadow: var(--shadow), inset 0 2px 0 0 var(--accent);
 }
 .chart-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -379,7 +379,7 @@ input, select { font: inherit; }
   justify-content: center;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.chart-card-actions .chart-dl:hover { background: var(--surface-hover); color: var(--accent); border-color: rgba(34, 211, 238, 0.4); }
+.chart-card-actions .chart-dl:hover { background: var(--surface-hover); color: var(--accent); border-color: rgba(8, 145, 178, 0.4); }
 .chart-body { position: relative; width: 100%; min-width: 0; }
 .chart-body canvas { width: 100% !important; }
 
@@ -473,8 +473,8 @@ input, select { font: inherit; }
     <div class="sidebar-brand">
       <div class="logo">💧</div>
       <div>
-        <div class="name">AquaPlant</div>
-        <div class="tag">Monitoreo hídrico</div>
+        <div class="name">Planta de agua</div>
+        <div class="tag">Coca-Cola Andina</div>
       </div>
     </div>
     <nav id="sidebar-nav" class="sidebar-nav"></nav>
@@ -485,7 +485,7 @@ input, select { font: inherit; }
     <header class="app-header">
       <button id="burger" class="header-burger" aria-label="Abrir menú">☰</button>
       <div class="header-title">
-        Monitoreo Planta de Agua
+        Planta de agua Coca-Cola Andina
         <small id="src-label">Fuente de datos: simulada (mock) · archivo único</small>
       </div>
       <div class="filters">
@@ -537,7 +537,7 @@ input, select { font: inherit; }
 <!-- Aplicación -->
 <script>
 /* ════════════════════════════════════════════════════════════════════
-   AquaPlant · Dashboard de monitoreo de planta de agua (standalone)
+   Planta de agua Coca-Cola Andina · Dashboard de monitoreo (standalone)
    Un solo archivo: datos simulados + KPIs + 7 páginas con Chart.js.
 
    Para conectar los Excel reales: reemplazar getDailyRecords() por una
@@ -615,7 +615,7 @@ const todayISO = () => toISO(new Date());
 const clampISO = (v, min, max) => (v < min ? min : v > max ? max : v);
 
 /* ════════════════ 3. Catálogo de planta ════════════════ */
-const PALETTE = ['#22d3ee','#3b82f6','#a78bfa','#f472b6','#fb923c','#facc15','#4ade80','#2dd4bf','#94a3b8','#e879f9'];
+const PALETTE = ['#0891b2','#1d4ed8','#a855f7','#db2777','#9a3412','#ca8a04','#008300','#14b8a6','#64748b','#c026d3'];
 const LINEAS_RETORNABLES = [
   { id: 'linea1', nombre: 'Consumo Agua Lavadora Línea 1', color: PALETTE[0] },
   { id: 'linea2', nombre: 'Consumo Agua Lavadora Línea 2', color: PALETTE[1] },
@@ -649,14 +649,14 @@ const DESTINOS_AP = [
 
 /* ════════════════ 4. Definición de KPIs y semáforos ════════════════ */
 const KPI_DEFS = {
-  ratioAgua: { label: 'Ratio Agua / Bebida', unit: 'L/L', decimals: 2, direction: 'below', ok: 1.27, warn: 3.0, accent: '#22d3ee' },
-  produccion: { label: 'Bebida producida', unit: 'm³', decimals: 0, direction: 'volume', deltaGood: 'up', accent: '#4ade80' },
-  consumoPozos: { label: 'Consumo total pozos', unit: 'm³', decimals: 0, direction: 'volume', deltaGood: 'down', accent: '#3b82f6' },
-  consumoNano: { label: 'Consumo plantas Nano', unit: 'm³', decimals: 0, direction: 'volume', deltaGood: 'down', accent: '#a78bfa' },
-  rechazoNano: { label: '% Rechazo Nano', unit: '%', decimals: 1, direction: 'below', ok: 18, warn: 24, accent: '#f472b6' },
-  recuperacionWUR: { label: '% Recuperación WUR', unit: '%', decimals: 1, direction: 'above', ok: 75, warn: 65, accent: '#2dd4bf' },
-  consumoCIP: { label: 'Agua CIP + Enjuague', unit: 'm³', decimals: 0, direction: 'volume', deltaGood: 'down', accent: '#fb923c' },
-  eficienciaRO: { label: 'Eficiencia permeado RO', unit: '%', decimals: 1, direction: 'above', ok: 78, warn: 70, accent: '#facc15' },
+  ratioAgua: { label: 'Ratio Agua / Bebida', unit: 'L/L', decimals: 2, direction: 'below', ok: 1.27, warn: 3.0, accent: '#0891b2' },
+  produccion: { label: 'Bebida producida', unit: 'm³', decimals: 0, direction: 'volume', deltaGood: 'up', accent: '#008300' },
+  consumoPozos: { label: 'Consumo total pozos', unit: 'm³', decimals: 0, direction: 'volume', deltaGood: 'down', accent: '#1d4ed8' },
+  consumoNano: { label: 'Consumo plantas Nano', unit: 'm³', decimals: 0, direction: 'volume', deltaGood: 'down', accent: '#a855f7' },
+  rechazoNano: { label: '% Rechazo Nano', unit: '%', decimals: 1, direction: 'below', ok: 18, warn: 24, accent: '#db2777' },
+  recuperacionWUR: { label: '% Recuperación WUR', unit: '%', decimals: 1, direction: 'above', ok: 75, warn: 65, accent: '#14b8a6' },
+  consumoCIP: { label: 'Agua CIP + Enjuague', unit: 'm³', decimals: 0, direction: 'volume', deltaGood: 'down', accent: '#9a3412' },
+  eficienciaRO: { label: 'Eficiencia permeado RO', unit: '%', decimals: 1, direction: 'above', ok: 78, warn: 70, accent: '#ca8a04' },
 };
 const LINE_RATIO = { direction: 'below', ok: 1.9, warn: 2.4 };
 const LINE_BP_FACTOR = 0.14;  // factor de presupuesto (BP) por línea, igual para las 6 líneas
@@ -678,14 +678,14 @@ const AREA_BP_DIARIO = {
   servicios: 560, potable: 410, elaboracion: 900, otros: 150,
 };
 const INDICADORES = [
-  { id: 'planta',      nombre: 'Planta',       color: '#22d3ee', total: true },
-  { id: 'retornable',  nombre: 'Retornable',   color: '#3b82f6' },
+  { id: 'planta',      nombre: 'Planta',       color: '#0891b2', total: true },
+  { id: 'retornable',  nombre: 'Retornable',   color: '#1d4ed8' },
   { id: 'oneWay',      nombre: 'One Way',       color: PALETTE[6] },
   { id: 'linea10',     nombre: 'Línea 10',      color: PALETTE[7] },
-  { id: 'servicios',   nombre: 'Servicios',     color: '#facc15' },
-  { id: 'potable',     nombre: 'Agua Potable',  color: '#2dd4bf' },
-  { id: 'otros',       nombre: 'Otros',         color: '#94a3b8' },
-  { id: 'elaboracion', nombre: 'Elaboración',   color: '#e879f9' },
+  { id: 'servicios',   nombre: 'Servicios',     color: '#ca8a04' },
+  { id: 'potable',     nombre: 'Agua Potable',  color: '#14b8a6' },
+  { id: 'otros',       nombre: 'Otros',         color: '#64748b' },
+  { id: 'elaboracion', nombre: 'Elaboración',   color: '#c026d3' },
 ];
 
 function evalStatus(value, def) {
@@ -905,7 +905,7 @@ function consumerRanking(records) {
   const items = [];
   for (const l of TODAS_LAS_LINEAS) items.push({ id: l.id, nombre: l.nombre, color: l.color, agua: sum(records.map((r) => r.lineas[l.id]?.agua ?? 0)) });
   for (const s of SERVICIOS) items.push({ id: 'srv-' + s.id, nombre: s.nombre, color: s.color, agua: sum(records.map((r) => r.servicios[s.id] ?? 0)) });
-  items.push({ id: 'elaboracion', nombre: 'Elaboración', color: '#e879f9', agua: sum(records.map((r) => r.elaboracion.agua)) });
+  items.push({ id: 'elaboracion', nombre: 'Elaboración', color: '#c026d3', agua: sum(records.map((r) => r.elaboracion.agua)) });
   const total = sum(items.map((i) => i.agua));
   return items
     .map((i) => ({ ...i, agua: round1(i.agua), pct: total > 0 ? (i.agua / total) * 100 : 0 }))
@@ -978,18 +978,18 @@ function reloadData() {
 }
 
 /* ════════════════ 8. Chart.js: tema y fábrica ════════════════ */
-Chart.defaults.color = '#93a4c3';
-Chart.defaults.borderColor = '#1b2742';
+Chart.defaults.color = '#5b6779';
+Chart.defaults.borderColor = '#e5e2d8';
 Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
 Chart.defaults.font.size = 11;
 Chart.defaults.plugins.legend.labels.usePointStyle = true;
 Chart.defaults.plugins.legend.labels.pointStyle = 'circle';
 Chart.defaults.plugins.legend.labels.boxHeight = 7;
-Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(13,22,38,0.96)';
-Chart.defaults.plugins.tooltip.borderColor = '#233150';
+Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(255,255,255,0.97)';
+Chart.defaults.plugins.tooltip.borderColor = '#d9d5c9';
 Chart.defaults.plugins.tooltip.borderWidth = 1;
-Chart.defaults.plugins.tooltip.titleColor = '#e6edf7';
-Chart.defaults.plugins.tooltip.bodyColor = '#93a4c3';
+Chart.defaults.plugins.tooltip.titleColor = '#1f2a37';
+Chart.defaults.plugins.tooltip.bodyColor = '#5b6779';
 Chart.defaults.plugins.tooltip.padding = 10;
 Chart.defaults.plugins.tooltip.boxPadding = 4;
 Chart.defaults.animation.duration = 350;
@@ -1031,7 +1031,7 @@ function lineDataset(label, data, color, { dashed = false, fillArea = false, sta
 function metaDataset(value, n, label) {
   return {
     label, data: Array(n).fill(value),
-    borderColor: '#f59e0b', borderDash: [6, 4], borderWidth: 1.6,
+    borderColor: '#b45309', borderDash: [6, 4], borderWidth: 1.6,
     pointRadius: 0, pointHoverRadius: 0, fill: false,
   };
 }
@@ -1050,10 +1050,10 @@ const centerTextPlugin = {
     const { x, y } = meta.data[0];
     ctx.save();
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#e6edf7';
+    ctx.fillStyle = '#1f2a37';
     ctx.font = '700 18px Segoe UI, sans-serif';
     ctx.fillText(opts.text, x, y - 2);
-    ctx.fillStyle = '#5d6f93';
+    ctx.fillStyle = '#8b94a3';
     ctx.font = '11px Segoe UI, sans-serif';
     ctx.fillText(opts.sub ?? '', x, y + 14);
     ctx.restore();
@@ -1074,7 +1074,7 @@ function statusPill(status) {
   const lbl = { ok: 'Óptimo', warn: 'Alerta', bad: 'Crítico' }[status];
   return `<span class="status-pill ${status}"><span class="status-dot ${status}"></span>${lbl}</span>`;
 }
-function kpiCard({ label, value, unit, decimals = 0, accent = '#22d3ee', status = null, delta = null, tone = 'neutral', subtitle = '', showDelta = true, statusText = false }) {
+function kpiCard({ label, value, unit, decimals = 0, accent = '#0891b2', status = null, delta = null, tone = 'neutral', subtitle = '', showDelta = true, statusText = false }) {
   const headDot = (status && !statusText) ? `<span class="status-dot ${status}"></span>` : '';
   const foot = (statusText && status) ? statusPill(status) : (showDelta ? deltaBadge(delta, tone) : '');
   return `<div class="kpi-card" style="--kpi-accent:${accent}">
@@ -1232,10 +1232,10 @@ function renderRetornable(root) {
   root.innerHTML = `
     ${pageHeader('Líneas Retornables', 'Líneas 1 · 2 · 3 · 4 · 5 · 11 — lavado y envasado retornable')}
     <div class="kpi-grid">
-      ${kpiCard({ label: 'Consumo de agua', value: agua, unit: 'm³', accent: '#3b82f6', showDelta: false, subtitle: '' })}
-      ${kpiCard({ label: 'Bebida producida', value: prod, unit: 'm³', accent: '#4ade80', showDelta: false, subtitle: '' })}
-      ${kpiCard({ label: 'Ratio agua / bebida', value: ratio, unit: 'L/L', decimals: 2, accent: '#22d3ee', status: evalStatus(ratio, LINE_RATIO), showDelta: false, subtitle: `Meta ≤ ${fmt(LINE_RATIO.ok, 1)} L/L` })}
-      ${kpiCard({ label: 'Línea más eficiente', value: mejor?.ratio ?? null, unit: '', decimals: 2, accent: '#facc15', showDelta: false, subtitle: mejor ? `${mejor.nombre} · L/L` : 'Sin producción' })}
+      ${kpiCard({ label: 'Consumo de agua', value: agua, unit: 'm³', accent: '#1d4ed8', showDelta: false, subtitle: '' })}
+      ${kpiCard({ label: 'Bebida producida', value: prod, unit: 'm³', accent: '#008300', showDelta: false, subtitle: '' })}
+      ${kpiCard({ label: 'Ratio agua / bebida', value: ratio, unit: 'L/L', decimals: 2, accent: '#0891b2', status: evalStatus(ratio, LINE_RATIO), showDelta: false, subtitle: `Meta ≤ ${fmt(LINE_RATIO.ok, 1)} L/L` })}
+      ${kpiCard({ label: 'Línea más eficiente', value: mejor?.ratio ?? null, unit: '', decimals: 2, accent: '#ca8a04', showDelta: false, subtitle: mejor ? `${mejor.nombre} · L/L` : 'Sin producción' })}
     </div>
     <div class="chart-grid">
       ${chartCard({ span: 12, title: 'BP · Real · GAP por línea', subtitle: 'Período seleccionado · BP = participación × 0,14 · Real = agua ÷ bebida · GAP = Real - BP', body: '<div id="tbl-bp"></div>' })}
@@ -1263,8 +1263,8 @@ function renderRetornable(root) {
   makeChart('ch-cmp-lineas', {
     type: 'bar',
     data: { labels: totals.map((t) => t.nombre.replace('Línea ', 'L')), datasets: [
-      barDataset('Agua (m³)', totals.map((t) => Math.round(t.agua)), '#3b82f6'),
-      barDataset('Producción (m³)', totals.map((t) => Math.round(t.produccion)), '#4ade80'),
+      barDataset('Agua (m³)', totals.map((t) => Math.round(t.agua)), '#1d4ed8'),
+      barDataset('Producción (m³)', totals.map((t) => Math.round(t.produccion)), '#008300'),
     ]},
     options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 0) } }, scales: scalesXY('m³', 0) },
   });
@@ -1335,7 +1335,7 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
     const prodSum = sum(RECS.map(totalProduccion));
     const zonaReal = safeDiv(zonaSum, prodSum);
     const zonaColor = zonaReal === null ? 'var(--text)' : (zonaReal <= ZONA_HUMEDA_BP ? 'var(--ok)' : 'var(--bad)');
-    zonaKpiCard = `<div class="kpi-card" style="--kpi-accent:#22d3ee">
+    zonaKpiCard = `<div class="kpi-card" style="--kpi-accent:#0891b2">
       <div class="kpi-head"><span class="kpi-label">Zona húmeda · BP vs Real</span></div>
       <div class="bp-kpi-rows">
         <div class="bp-kpi-row"><span class="bp-kpi-name">BP</span><span class="bp-kpi-num">${fmt(ZONA_HUMEDA_BP, 3)}</span></div>
@@ -1353,7 +1353,7 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
     const l10Div = sum(RECS.map((r) => r.prodAllLines ?? 0));
     const l10Real = safeDiv(l10Num, l10Div);
     const l10Color = l10Real === null ? 'var(--text)' : (l10Real <= LINEA10_BP ? 'var(--ok)' : 'var(--bad)');
-    linea10KpiCard = `<div class="kpi-card" style="--kpi-accent:#a78bfa">
+    linea10KpiCard = `<div class="kpi-card" style="--kpi-accent:#a855f7">
       <div class="kpi-head"><span class="kpi-label">Línea 10 · BP vs Real</span></div>
       <div class="bp-kpi-rows">
         <div class="bp-kpi-row"><span class="bp-kpi-name">BP</span><span class="bp-kpi-num">${fmt(LINEA10_BP, 3)}</span></div>
@@ -1368,13 +1368,13 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
     <div class="kpi-grid">
       ${zonaKpiCard}
       ${linea10KpiCard}
-      ${(isOneWay || isLinea10) ? '' : kpiCard({ label: 'Consumo de agua', value: k.agua, unit: 'm³', accent: '#3b82f6', delta: dAgua, tone: evalDelta(dAgua, { deltaGood: 'down' }) })}
-      ${isLinea10 ? '' : kpiCard({ label: 'Bebida producida', value: isOneWay ? owProdSum : k.produccion, unit: 'm³', accent: '#4ade80', delta: isOneWay ? dOwProd : dProd, tone: evalDelta(isOneWay ? dOwProd : dProd, { deltaGood: 'up' }) })}
+      ${(isOneWay || isLinea10) ? '' : kpiCard({ label: 'Consumo de agua', value: k.agua, unit: 'm³', accent: '#1d4ed8', delta: dAgua, tone: evalDelta(dAgua, { deltaGood: 'down' }) })}
+      ${isLinea10 ? '' : kpiCard({ label: 'Bebida producida', value: isOneWay ? owProdSum : k.produccion, unit: 'm³', accent: '#008300', delta: isOneWay ? dOwProd : dProd, tone: evalDelta(isOneWay ? dOwProd : dProd, { deltaGood: 'up' }) })}
       ${(isOneWay || isLinea10) ? '' : kpiCard({ label: 'Ratio agua / bebida', value: k.ratio, unit: 'L/L', decimals: 2, accent: color, status: evalStatus(k.ratio, LINE_RATIO), delta: dRatio, tone: evalDelta(dRatio, LINE_RATIO), subtitle: `Meta ≤ ${fmt(LINE_RATIO.ok, 1)} L/L` })}
       ${isLinea10 ? '' : kpiCard({
         label: 'Día de mayor consumo',
         value: isOneWay ? (owPeak && owPeak.val > 0 ? owPeak.val : null) : (peakIdx >= 0 ? aguaDaily[peakIdx] : null),
-        unit: 'm³', accent: '#fb923c',
+        unit: 'm³', accent: '#9a3412',
         subtitle: isOneWay
           ? (owPeak && owPeak.val > 0 ? `${fmtDayShort(owPeak.date)} · ${owPeak.line.toUpperCase()}` : '—')
           : (peakIdx >= 0 ? fmtDayShort(RECS[peakIdx].date) : '—'),
@@ -1393,8 +1393,8 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
     makeChart('ch-daily', {
       type: 'line',
       data: { labels: dailyLabels, datasets: [
-        lineDataset('Agua (m³)', aguaDaily, '#3b82f6'),
-        lineDataset('Producción (m³)', prodDaily, '#4ade80'),
+        lineDataset('Agua (m³)', aguaDaily, '#1d4ed8'),
+        lineDataset('Producción (m³)', prodDaily, '#008300'),
       ]},
       options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 1) } }, scales: scalesXY('m³', 1) },
     });
@@ -1417,8 +1417,8 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
     makeChart('ch-cum', {
       type: 'line',
       data: { labels: dailyLabels, datasets: [
-        lineDataset('Agua acumulada', cumulative(aguaDaily), '#3b82f6', { fillArea: true }),
-        lineDataset('Producción acumulada', cumulative(prodDaily), '#4ade80', { fillArea: true }),
+        lineDataset('Agua acumulada', cumulative(aguaDaily), '#1d4ed8', { fillArea: true }),
+        lineDataset('Producción acumulada', cumulative(prodDaily), '#008300', { fillArea: true }),
       ]},
       options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 0) } }, scales: scalesXY('m³', 0) },
     });
@@ -1433,7 +1433,7 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
       cmpChart = makeChart('ch-cmp', {
         type: 'line',
         data: { labels, datasets: [
-          lineDataset('Período actual', cur, '#22d3ee'),
+          lineDataset('Período actual', cur, '#0891b2'),
           lineDataset('Período anterior', prv, '#64748b', { dashed: true }),
         ]},
         options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 1) } }, scales: scalesXY('m³', 1) },
@@ -1446,8 +1446,8 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
     makeChart('ch-hist', {
       type: 'bar',
       data: { labels: hist.map((m) => fmtMonthShort(m.month)), datasets: [
-        barDataset('Agua (m³)', hist.map((m) => Math.round(m.agua)), '#3b82f6'),
-        barDataset('Producción (m³)', hist.map((m) => Math.round(m.produccion)), '#4ade80'),
+        barDataset('Agua (m³)', hist.map((m) => Math.round(m.agua)), '#1d4ed8'),
+        barDataset('Producción (m³)', hist.map((m) => Math.round(m.produccion)), '#008300'),
       ]},
       options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 0) } }, scales: scalesXY('m³', 0) },
     });
@@ -1479,9 +1479,9 @@ function renderServicios(root) {
   root.innerHTML = `
     ${pageHeader('Servicios Auxiliares', 'Torres de enfriamiento, calderas, CIP y otros servicios de planta')}
     <div class="kpi-grid">
-      ${kpiCard({ label: 'Otros servicios (Agua de Limpieza)', value: otrosTot, unit: 'm³', accent: '#22d3ee', delta: dOtros, tone: evalDelta(dOtros, { deltaGood: 'down' }) })}
+      ${kpiCard({ label: 'Otros servicios (Agua de Limpieza)', value: otrosTot, unit: 'm³', accent: '#0891b2', delta: dOtros, tone: evalDelta(dOtros, { deltaGood: 'down' }) })}
       ${kpiCards}
-      ${kpiCard({ label: 'Condensadores', value: condenTot, unit: 'm³', accent: '#a78bfa', delta: dConden, tone: evalDelta(dConden, { deltaGood: 'down' }), subtitle: condenTot > 0 ? '' : 'Sin datos cargados' })}
+      ${kpiCard({ label: 'Condensadores', value: condenTot, unit: 'm³', accent: '#a855f7', delta: dConden, tone: evalDelta(dConden, { deltaGood: 'down' }), subtitle: condenTot > 0 ? '' : 'Sin datos cargados' })}
     </div>
     <div class="chart-grid">
       ${chartCard({ span: 7, title: 'Consumo diario por servicio', subtitle: 'Series apiladas (m³/día)', canvasId: 'ch-daily', height: 310 })}
@@ -1514,7 +1514,7 @@ function renderServicios(root) {
   const monthly = monthlySeries(HIST, { total: totalServicios });
   makeChart('ch-monthly', {
     type: 'bar',
-    data: { labels: monthly.map((m) => fmtMonthShort(m.month)), datasets: [barDataset('Servicios (m³)', monthly.map((m) => Math.round(m.total)), '#22d3ee')] },
+    data: { labels: monthly.map((m) => fmtMonthShort(m.month)), datasets: [barDataset('Servicios (m³)', monthly.map((m) => Math.round(m.total)), '#0891b2')] },
     options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: tooltipNumber('m³', 0) } }, scales: scalesXY('m³', 0) },
   });
 
@@ -1547,10 +1547,10 @@ function renderPotable(root) {
   root.innerHTML = `
     ${pageHeader('Agua Potable', 'Producción, consumo, pérdidas y eficiencia del sistema de agua potable')}
     <div class="kpi-grid">
-      ${kpiCard({ label: 'Producción', value: k.produccion, unit: 'm³', accent: '#22d3ee', delta: dP, tone: evalDelta(dP, {}) })}
-      ${kpiCard({ label: 'Consumo', value: k.consumo, unit: 'm³', accent: '#3b82f6', delta: dC, tone: evalDelta(dC, { deltaGood: 'down' }) })}
-      ${kpiCard({ label: 'Pérdidas', value: k.perdidas, unit: 'm³', accent: '#ef4444', delta: dPer, tone: evalDelta(dPer, { deltaGood: 'down' }), subtitle: `${fmt(k.perdidasPct, 1)} % de la producción` })}
-      ${kpiCard({ label: 'Eficiencia del sistema', value: k.eficiencia, unit: '%', decimals: 1, accent: '#4ade80', status: evalStatus(k.eficiencia, POTABLE_EF), delta: dEf, tone: evalDelta(dEf, POTABLE_EF), subtitle: `Meta ≥ ${POTABLE_EF.ok} %` })}
+      ${kpiCard({ label: 'Producción', value: k.produccion, unit: 'm³', accent: '#0891b2', delta: dP, tone: evalDelta(dP, {}) })}
+      ${kpiCard({ label: 'Consumo', value: k.consumo, unit: 'm³', accent: '#1d4ed8', delta: dC, tone: evalDelta(dC, { deltaGood: 'down' }) })}
+      ${kpiCard({ label: 'Pérdidas', value: k.perdidas, unit: 'm³', accent: '#dc2626', delta: dPer, tone: evalDelta(dPer, { deltaGood: 'down' }), subtitle: `${fmt(k.perdidasPct, 1)} % de la producción` })}
+      ${kpiCard({ label: 'Eficiencia del sistema', value: k.eficiencia, unit: '%', decimals: 1, accent: '#008300', status: evalStatus(k.eficiencia, POTABLE_EF), delta: dEf, tone: evalDelta(dEf, POTABLE_EF), subtitle: `Meta ≥ ${POTABLE_EF.ok} %` })}
     </div>
     <div class="chart-grid">
       ${chartCard({ span: 7, title: 'Balance de agua diario', subtitle: 'Consumo útil + pérdidas = producción (m³/día)', canvasId: 'ch-bal' })}
@@ -1562,8 +1562,8 @@ function renderPotable(root) {
   makeChart('ch-bal', {
     type: 'line',
     data: { labels: dayLabels(), datasets: [
-      lineDataset('Consumo útil', RECS.map((r) => r.aguaPotable.consumo), '#3b82f6', { fillArea: true, stack: 'first' }),
-      lineDataset('Pérdidas', RECS.map((r) => round1(r.aguaPotable.produccion - r.aguaPotable.consumo)), '#ef4444', { fillArea: true, stack: true }),
+      lineDataset('Consumo útil', RECS.map((r) => r.aguaPotable.consumo), '#1d4ed8', { fillArea: true, stack: 'first' }),
+      lineDataset('Pérdidas', RECS.map((r) => round1(r.aguaPotable.produccion - r.aguaPotable.consumo)), '#dc2626', { fillArea: true, stack: true }),
     ]},
     options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 1) } }, scales: scalesXY('m³', 1, { stacked: true }) },
   });
@@ -1572,7 +1572,7 @@ function renderPotable(root) {
   makeChart('ch-ef', {
     type: 'line',
     data: { labels: dayLabels(), datasets: [
-      lineDataset('Eficiencia (%)', efDaily, '#4ade80'),
+      lineDataset('Eficiencia (%)', efDaily, '#008300'),
       metaDataset(POTABLE_EF.ok, efDaily.length, `Meta ${POTABLE_EF.ok}%`),
     ]},
     options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('%', 1) } }, scales: scalesXY('%', 1) },
@@ -1595,8 +1595,8 @@ function renderPotable(root) {
   makeChart('ch-monthly', {
     type: 'bar',
     data: { labels: monthly.map((m) => fmtMonthShort(m.month)), datasets: [
-      barDataset('Producción (m³)', monthly.map((m) => Math.round(m.produccion)), '#22d3ee'),
-      barDataset('Consumo (m³)', monthly.map((m) => Math.round(m.consumo)), '#3b82f6'),
+      barDataset('Producción (m³)', monthly.map((m) => Math.round(m.produccion)), '#0891b2'),
+      barDataset('Consumo (m³)', monthly.map((m) => Math.round(m.consumo)), '#1d4ed8'),
     ]},
     options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 0) } }, scales: scalesXY('m³', 0) },
   });
@@ -1614,9 +1614,9 @@ function renderElaboracion(root) {
   root.innerHTML = `
     ${pageHeader('Elaboración', 'Preparación de jarabes y mezclas — consumo de agua y producción')}
     <div class="kpi-grid">
-      ${kpiCard({ label: 'Consumo de agua', value: k.agua, unit: 'm³', accent: '#3b82f6', delta: dA, tone: evalDelta(dA, { deltaGood: 'down' }) })}
-      ${kpiCard({ label: 'Producto elaborado', value: k.produccion, unit: 'm³', accent: '#4ade80', delta: dP, tone: evalDelta(dP, { deltaGood: 'up' }) })}
-      ${kpiCard({ label: 'Ratio agua / producto', value: k.ratio, unit: 'L/L', decimals: 2, accent: '#e879f9', status: evalStatus(k.ratio, ELAB_RATIO), delta: dR, tone: evalDelta(dR, ELAB_RATIO), subtitle: `Meta ≤ ${fmt(ELAB_RATIO.ok, 2)} L/L` })}
+      ${kpiCard({ label: 'Consumo de agua', value: k.agua, unit: 'm³', accent: '#1d4ed8', delta: dA, tone: evalDelta(dA, { deltaGood: 'down' }) })}
+      ${kpiCard({ label: 'Producto elaborado', value: k.produccion, unit: 'm³', accent: '#008300', delta: dP, tone: evalDelta(dP, { deltaGood: 'up' }) })}
+      ${kpiCard({ label: 'Ratio agua / producto', value: k.ratio, unit: 'L/L', decimals: 2, accent: '#c026d3', status: evalStatus(k.ratio, ELAB_RATIO), delta: dR, tone: evalDelta(dR, ELAB_RATIO), subtitle: `Meta ≤ ${fmt(ELAB_RATIO.ok, 2)} L/L` })}
     </div>
     <div class="chart-grid">
       ${chartCard({ span: 7, title: 'Tendencia diaria', subtitle: 'Agua consumida y producto elaborado (m³/día)', canvasId: 'ch-daily' })}
@@ -1629,8 +1629,8 @@ function renderElaboracion(root) {
   makeChart('ch-daily', {
     type: 'line',
     data: { labels: dayLabels(), datasets: [
-      lineDataset('Agua (m³)', aguaDaily, '#3b82f6'),
-      lineDataset('Producto (m³)', prodDaily, '#4ade80'),
+      lineDataset('Agua (m³)', aguaDaily, '#1d4ed8'),
+      lineDataset('Producto (m³)', prodDaily, '#008300'),
     ]},
     options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 1) } }, scales: scalesXY('m³', 1) },
   });
@@ -1638,7 +1638,7 @@ function renderElaboracion(root) {
   makeChart('ch-ratio', {
     type: 'line',
     data: { labels: dayLabels(), datasets: [
-      lineDataset('Ratio (L/L)', ratioDaily, '#e879f9'),
+      lineDataset('Ratio (L/L)', ratioDaily, '#c026d3'),
       metaDataset(ELAB_RATIO.ok, ratioDaily.length, `Meta ${fmt(ELAB_RATIO.ok, 2)}`),
     ]},
     options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('L/L', 2) } }, scales: scalesXY('L/L', 2) },
@@ -1647,8 +1647,8 @@ function renderElaboracion(root) {
   makeChart('ch-cum', {
     type: 'line',
     data: { labels: dayLabels(), datasets: [
-      lineDataset('Agua acumulada', cumulative(aguaDaily), '#3b82f6', { fillArea: true }),
-      lineDataset('Producto acumulado', cumulative(prodDaily), '#4ade80', { fillArea: true }),
+      lineDataset('Agua acumulada', cumulative(aguaDaily), '#1d4ed8', { fillArea: true }),
+      lineDataset('Producto acumulado', cumulative(prodDaily), '#008300', { fillArea: true }),
     ]},
     options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 0) } }, scales: scalesXY('m³', 0) },
   });
@@ -1663,7 +1663,7 @@ function renderElaboracion(root) {
     cmpChart = makeChart('ch-cmp', {
       type: 'line',
       data: { labels, datasets: [
-        lineDataset('Período actual', cur, '#22d3ee'),
+        lineDataset('Período actual', cur, '#0891b2'),
         lineDataset('Período anterior', prv, '#64748b', { dashed: true }),
       ]},
       options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 1) } }, scales: scalesXY('m³', 1) },
@@ -1676,8 +1676,8 @@ function renderElaboracion(root) {
   makeChart('ch-hist', {
     type: 'bar',
     data: { labels: hist.map((m) => fmtMonthShort(m.month)), datasets: [
-      barDataset('Agua (m³)', hist.map((m) => Math.round(m.agua)), '#3b82f6'),
-      barDataset('Producto (m³)', hist.map((m) => Math.round(m.produccion)), '#4ade80'),
+      barDataset('Agua (m³)', hist.map((m) => Math.round(m.agua)), '#1d4ed8'),
+      barDataset('Producto (m³)', hist.map((m) => Math.round(m.produccion)), '#008300'),
     ]},
     options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 0) } }, scales: scalesXY('m³', 0) },
   });
@@ -1785,7 +1785,7 @@ function downloadChart(canvasId) {
   ctx.drawImage(src, 0, 0);
   const a = document.createElement('a');
   a.href = out.toDataURL('image/png');
-  a.download = `aquaplant-${state.page}-${canvasId}-${state.start}_${state.end}.png`;
+  a.download = `planta-agua-andina-${state.page}-${canvasId}-${state.start}_${state.end}.png`;
   a.click();
 }
 document.getElementById('page-root').addEventListener('click', (e) => {
@@ -2133,13 +2133,13 @@ function downloadTemplate() {
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Datos');
-    XLSX.writeFile(wb, 'plantilla_aquaplant.xlsx');
+    XLSX.writeFile(wb, 'plantilla_planta_agua.xlsx');
   } else {
     const csv = aoa.map((r) => r.map((c) => { const s = String(c); return /[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(';')).join('\n');
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'plantilla_aquaplant.csv';
+    a.download = 'plantilla_planta_agua.csv';
     a.click();
     URL.revokeObjectURL(a.href);
   }
