@@ -1350,9 +1350,9 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
     </div>`;
   }
 
-  // KPI exclusivo de Línea 10 (merma) — solo se calcula en esa pestaña
+  // KPI de merma de Línea 10 — se muestra como tarjeta dentro de One Way
   let linea10KpiCard = '';
-  if (isLinea10) {
+  if (isOneWay) {
     // Real = (Enviado L10 − Producción L10 − Enviado L11) ÷ Σ(L1–L12 + PMIX)
     const l10Num = sum(RECS.map((r) => (r.enviadoL10 ?? 0) - ((r.prodLineas && r.prodLineas.l10) || 0) - (r.enviadoL11 ?? 0)));
     const l10Div = sum(RECS.map((r) => r.prodAllLines ?? 0));
@@ -1693,9 +1693,7 @@ const PAGES = {
   planta: { label: 'Planta General', icon: '🏭', group: 'General', render: renderPlanta },
   retornable: { label: 'Retornable', icon: '♻️', group: 'Líneas de producción', render: renderRetornable },
   oneway: { label: 'One Way', icon: '🧴', group: 'Líneas de producción',
-    render: (root) => renderLineDetail(root, { lineId: 'oneWay', title: 'Línea One Way', subtitle: 'Envasado no retornable (PET / lata)', color: LINEA_ONE_WAY.color }) },
-  linea10: { label: 'Línea 10', icon: '🔟', group: 'Líneas de producción',
-    render: (root) => renderLineDetail(root, { lineId: 'linea10', title: 'Línea 10', subtitle: 'Indicadores exclusivos de la Línea 10', color: LINEA_10.color }) },
+    render: (root) => renderLineDetail(root, { lineId: 'oneWay', title: 'Línea One Way', subtitle: 'Envasado no retornable (PET / lata) · incluye indicador de Línea 10', color: LINEA_ONE_WAY.color }) },
   servicios: { label: 'Servicios', icon: '⚙️', group: 'Áreas de soporte', render: renderServicios },
   potable: { label: 'Agua Potable', icon: '🚰', group: 'Áreas de soporte', render: renderPotable },
   elaboracion: { label: 'Elaboración', icon: '🧪', group: 'Áreas de soporte', render: renderElaboracion },
