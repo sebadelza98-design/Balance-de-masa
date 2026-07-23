@@ -1357,7 +1357,7 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
     const zonaReal = safeDiv(zonaSum, prodSum);
     const zonaColor = zonaReal === null ? 'var(--text)' : (zonaReal <= ZONA_HUMEDA_BP ? 'var(--ok)' : 'var(--bad)');
     zonaKpiCard = `<div class="kpi-card" style="--kpi-accent:#0891b2">
-      <div class="kpi-head"><span class="kpi-label">Zona húmeda · BP vs Real</span></div>
+      <div class="kpi-head"><span class="kpi-label">Líneas One Way · BP vs Real</span></div>
       <div class="bp-kpi-rows">
         <div class="bp-kpi-row"><span class="bp-kpi-name">BP</span><span class="bp-kpi-num">${fmt(ZONA_HUMEDA_BP, 3)}</span></div>
         <div class="bp-kpi-row"><span class="bp-kpi-name">real</span><span class="bp-kpi-num" style="color:${zonaColor}">${fmt(zonaReal, 3)}</span></div>
@@ -1402,7 +1402,7 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
       })}
     </div>
     <div class="chart-grid">
-      ${isLinea10 ? '' : chartCard({ span: isOneWay ? 12 : 7, title: 'Tendencia diaria', subtitle: 'Consumo de agua y producción (m³/día)', canvasId: 'ch-daily' })}
+      ${(isOneWay || isLinea10) ? '' : chartCard({ span: 7, title: 'Tendencia diaria', subtitle: 'Consumo de agua y producción (m³/día)', canvasId: 'ch-daily' })}
       ${(isOneWay || isLinea10) ? '' : chartCard({ span: 5, title: 'Ratio diario agua / bebida', subtitle: `Meta ≤ ${fmt(LINE_RATIO.ok, 1)} L/L`, canvasId: 'ch-ratio' })}
       ${(isOneWay || isLinea10) ? '' : chartCard({ span: 6, title: 'Acumulado del período', subtitle: 'Agua y producción acumuladas (m³)', canvasId: 'ch-cum', height: 290 })}
       ${(isOneWay || isLinea10) ? '' : chartCard({ span: 6, title: 'Comparación con período anterior', subtitle: 'Día a día vs período anterior equivalente', canvasId: 'ch-cmp', height: 290, actions: `<select id="sel-cmp"><option value="agua">Consumo de agua</option><option value="produccion">Producción</option></select>` })}
@@ -1410,7 +1410,7 @@ function renderLineDetail(root, { lineId, title, subtitle, color }) {
     </div>`;
 
   const dailyLabels = dayLabels();
-  if (!isLinea10) {
+  if (!isOneWay && !isLinea10) {
     makeChart('ch-daily', {
       type: 'line',
       data: { labels: dailyLabels, datasets: [
@@ -1507,8 +1507,7 @@ function renderServicios(root) {
     <div class="chart-grid">
       ${chartCard({ span: 7, title: 'Consumo diario por servicio', subtitle: 'Series apiladas (m³/día)', canvasId: 'ch-daily', height: 310 })}
       ${chartCard({ span: 5, title: 'Distribución porcentual del consumo', subtitle: 'Participación de cada servicio en el período', canvasId: 'ch-donut', height: 310 })}
-      ${chartCard({ span: 6, title: 'Consumo acumulado mensual', subtitle: 'Total de servicios por mes · últimos 12 meses', canvasId: 'ch-monthly', height: 290 })}
-      ${chartCard({ span: 6, title: 'Tendencia histórica por servicio', subtitle: 'Consumo mensual (m³) · últimos 12 meses', canvasId: 'ch-hist', height: 290 })}
+      ${chartCard({ span: 12, title: 'Consumo acumulado mensual', subtitle: 'Total de servicios por mes · últimos 12 meses', canvasId: 'ch-monthly', height: 290 })}
       ${chartCard({ span: 12, title: 'Detalle por servicio', subtitle: 'Consumo del período, participación y variación', body: '<div id="tbl-srv"></div>' })}
     </div>`;
 
@@ -1537,13 +1536,6 @@ function renderServicios(root) {
     type: 'bar',
     data: { labels: monthly.map((m) => fmtMonthShort(m.month)), datasets: [barDataset('Servicios (m³)', monthly.map((m) => Math.round(m.total)), '#0891b2')] },
     options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: tooltipNumber('m³', 0) } }, scales: scalesXY('m³', 0) },
-  });
-
-  const histSrv = monthlySeries(HIST, Object.fromEntries(SERVICIOS.map((s) => [s.id, (r) => r.servicios[s.id]])));
-  makeChart('ch-hist', {
-    type: 'line',
-    data: { labels: histSrv.map((m) => fmtMonthShort(m.month)), datasets: SERVICIOS.map((s) => lineDataset(s.nombre, histSrv.map((m) => Math.round(m[s.id])), s.color)) },
-    options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 0) } }, scales: scalesXY('m³', 0) },
   });
 
   renderTable('tbl-srv', [
@@ -1628,9 +1620,6 @@ function renderElaboracion(root) {
   const k = elabKpis(RECS);
   const kp = elabKpis(PREV);
   const dA = deltaPct(k.agua, kp.agua), dP = deltaPct(k.produccion, kp.produccion), dR = deltaPct(k.ratio, kp.ratio);
-  const aguaDaily = RECS.map((r) => r.elaboracion.agua);
-  const prodDaily = RECS.map((r) => r.elaboracion.produccion);
-  const ratioDaily = RECS.map((r) => (r.elaboracion.produccion > 0 ? +(r.elaboracion.agua / r.elaboracion.produccion).toFixed(2) : null));
 
   root.innerHTML = `
     ${pageHeader('Elaboración', 'Preparación de jarabes y mezclas — consumo de agua y producción')}
@@ -1638,70 +1627,7 @@ function renderElaboracion(root) {
       ${kpiCard({ label: 'Consumo de agua', value: k.agua, unit: 'm³', accent: '#1d4ed8', delta: dA, tone: evalDelta(dA, { deltaGood: 'down' }) })}
       ${kpiCard({ label: 'Producto elaborado', value: k.produccion, unit: 'm³', accent: '#008300', delta: dP, tone: evalDelta(dP, { deltaGood: 'up' }) })}
       ${kpiCard({ label: 'Ratio agua / producto', value: k.ratio, unit: 'L/L', decimals: 2, accent: '#c026d3', status: evalStatus(k.ratio, ELAB_RATIO), delta: dR, tone: evalDelta(dR, ELAB_RATIO), subtitle: `Meta ≤ ${fmt(ELAB_RATIO.ok, 2)} L/L` })}
-    </div>
-    <div class="chart-grid">
-      ${chartCard({ span: 7, title: 'Tendencia diaria', subtitle: 'Agua consumida y producto elaborado (m³/día)', canvasId: 'ch-daily' })}
-      ${chartCard({ span: 5, title: 'Ratio diario agua / producto', subtitle: `Meta ≤ ${fmt(ELAB_RATIO.ok, 2)} L/L`, canvasId: 'ch-ratio' })}
-      ${chartCard({ span: 6, title: 'Acumulado del período', subtitle: 'Agua y producto acumulados (m³)', canvasId: 'ch-cum', height: 290 })}
-      ${chartCard({ span: 6, title: 'Comparación con período anterior', subtitle: 'Día a día vs período anterior equivalente', canvasId: 'ch-cmp', height: 290, actions: `<select id="sel-cmp"><option value="agua">Consumo de agua</option><option value="produccion">Producto elaborado</option></select>` })}
-      ${chartCard({ span: 12, title: 'Comparación mensual', subtitle: 'Totales mensuales · últimos 12 meses', canvasId: 'ch-hist' })}
     </div>`;
-
-  makeChart('ch-daily', {
-    type: 'line',
-    data: { labels: dayLabels(), datasets: [
-      lineDataset('Agua (m³)', aguaDaily, '#1d4ed8'),
-      lineDataset('Producto (m³)', prodDaily, '#008300'),
-    ]},
-    options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 1) } }, scales: scalesXY('m³', 1) },
-  });
-
-  makeChart('ch-ratio', {
-    type: 'line',
-    data: { labels: dayLabels(), datasets: [
-      lineDataset('Ratio (L/L)', ratioDaily, '#c026d3'),
-      metaDataset(ELAB_RATIO.ok, ratioDaily.length, `Meta ${fmt(ELAB_RATIO.ok, 2)}`),
-    ]},
-    options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('L/L', 2) } }, scales: scalesXY('L/L', 2) },
-  });
-
-  makeChart('ch-cum', {
-    type: 'line',
-    data: { labels: dayLabels(), datasets: [
-      lineDataset('Agua acumulada', cumulative(aguaDaily), '#1d4ed8', { fillArea: true }),
-      lineDataset('Producto acumulado', cumulative(prodDaily), '#008300', { fillArea: true }),
-    ]},
-    options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 0) } }, scales: scalesXY('m³', 0) },
-  });
-
-  let cmpChart = null;
-  const drawCompare = (metric) => {
-    const n = Math.max(RECS.length, PREV.length);
-    const labels = Array.from({ length: n }, (_, i) => 'D' + (i + 1));
-    const cur = Array.from({ length: n }, (_, i) => (RECS[i] ? RECS[i].elaboracion[metric] : null));
-    const prv = Array.from({ length: n }, (_, i) => (PREV[i] ? PREV[i].elaboracion[metric] : null));
-    if (cmpChart) { cmpChart.destroy(); charts = charts.filter((c) => c !== cmpChart); }
-    cmpChart = makeChart('ch-cmp', {
-      type: 'line',
-      data: { labels, datasets: [
-        lineDataset('Período actual', cur, '#0891b2'),
-        lineDataset('Período anterior', prv, '#64748b', { dashed: true }),
-      ]},
-      options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 1) } }, scales: scalesXY('m³', 1) },
-    });
-  };
-  drawCompare('agua');
-  document.getElementById('sel-cmp').addEventListener('change', (e) => drawCompare(e.target.value));
-
-  const hist = monthlySeries(HIST, { agua: (r) => r.elaboracion.agua, produccion: (r) => r.elaboracion.produccion });
-  makeChart('ch-hist', {
-    type: 'bar',
-    data: { labels: hist.map((m) => fmtMonthShort(m.month)), datasets: [
-      barDataset('Agua (m³)', hist.map((m) => Math.round(m.agua)), '#1d4ed8'),
-      barDataset('Producto (m³)', hist.map((m) => Math.round(m.produccion)), '#008300'),
-    ]},
-    options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 0) } }, scales: scalesXY('m³', 0) },
-  });
 }
 
 /* ════════════════ 11. Navegación y filtros ════════════════ */
