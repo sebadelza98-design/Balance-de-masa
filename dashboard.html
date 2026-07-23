@@ -1544,7 +1544,7 @@ function renderServicios(root) {
     { key: 'pct', label: 'Participación', num: true, html: (r) => fmtPct(r.pct, 1) },
     { key: 'bar', label: '', html: (r) => `<span class="inline-bar"><span style="width:${Math.min(100, r.pct)}%"></span></span>` },
     { key: 'delta', label: 'Δ vs anterior', num: true, html: (r) => deltaBadge(r.delta, r.delta === null ? 'neutral' : r.delta < 0 ? 'good' : 'bad') },
-  ], totals.map((t) => ({ ...t, delta: deltaPct(t.agua, byId(prevTotals, t.id)?.agua ?? null) })), 'agua');
+  ], totals.filter((t) => t.id !== 'sanitarios' && t.id !== 'riego').map((t) => ({ ...t, delta: deltaPct(t.agua, byId(prevTotals, t.id)?.agua ?? null) })), 'agua');
 }
 
 /* ── 10.5 Agua Potable ── */
