@@ -1644,10 +1644,21 @@ function renderElaboracion(root) {
   const bothReal = safeDiv(cipSum + enjSum, prodAll);
   const bothBP = CIP_BP + ENJUAGUE_BP;
 
+  // Agua Recuperación · Real = M19 / L3 (hoja «Arbol Agua Semanal 2»):
+  //   M19 = (H3 − F16) − G16
+  //     H3  = Σ Pozos!R  (Total consumo Pozos + Potable)  → r.pozosTotalPot
+  //     F16 = Σ Pozos!P  (Agua potable 25%)                → r.aguaPotable.consumo
+  //     G16 = Σ 'Permeado- Servicio- Azucar'!BF (TOTAL)     → r.recupG16
+  //   L3  = producción L1–L12 + PMIX del período           → prodAll
+  const pozosTotalPot = sum(RECS.map((r) => r.pozosTotalPot ?? 0));
+  const potableSum = sum(RECS.map((r) => r.aguaPotable.consumo));
+  const g16Sum = sum(RECS.map((r) => r.recupG16 ?? 0));
+  const aguaRecupReal = safeDiv((pozosTotalPot - potableSum) - g16Sum, prodAll);
+
   // Componentes de Elaboración. Los que aún no están mapeados a datos van con
   // real = null («—», por definir). El real de Elaboración es la suma de los
   // componentes que ya tienen dato.
-  const compReals = [bothReal]; // CIP + Enjuague (único mapeado por ahora)
+  const compReals = [bothReal, aguaRecupReal]; // CIP+Enjuague y Agua Recuperación (mapeados)
   const mapped = compReals.filter((v) => v !== null);
   const elabReal = mapped.length ? mapped.reduce((a, b) => a + b, 0) : null;
 
@@ -1688,7 +1699,7 @@ function renderElaboracion(root) {
           ${bpRealCard('CIP · BP vs Real', CIP_BP, cipReal, 'CIP ÷ producción L1–L12 + PMIX', 'kpi-card-sub')}
         </div>
       </div>
-      ${bpRealCard('Agua Recuperación · BP vs Real', AGUA_RECUP_BP, null, 'por definir · pendiente de mapear')}
+      ${bpRealCard('Agua Recuperación · BP vs Real', AGUA_RECUP_BP, aguaRecupReal, '(Pozos+Pot − Agua potable 25% − G16) ÷ producción L1–L12 + PMIX')}
       ${bpRealCard('Tratamiento de agua · BP vs Real', TRATAMIENTO_BP, null, 'por definir · pendiente de mapear')}
       ${bpRealCard('Planta Recuperación · BP vs Real', PLANTA_RECUP_BP, null, 'por definir · pendiente de mapear')}
       ${bpRealCard('Producto · BP vs Real', PRODUCTO_BP, null, 'por definir · pendiente de mapear')}
@@ -1877,6 +1888,8 @@ function emptyRecord(date) {
     servicios: { torres: 0, caldera1: 0, caldera2: 0, cip: 0, sanitarios: 0, riego: 0, otros: 0, condensadores: 0 },
     aguaPotable: { produccion: 0, consumo: 0, destinos: { proceso: 0, servicios: 0, casino: 0, sanitarios: 0 } },
     elaboracion: { produccion: 0, agua: 0 },
+    pozosTotalPot: 0, // Pozos!R «Total consumo Pozos + Potable» (para Agua Recuperación)
+    recupG16: 0,      // G16 del árbol semanal ('Permeado- Servicio- Azucar'!BF)
   };
   TODAS_LAS_LINEAS.forEach((l) => { r.lineas[l.id] = { agua: 0, produccion: 0 }; });
   return r;
@@ -2118,22 +2131,46 @@ function pozosPotableMap(wb) {
     if (cnt > best) { best = cnt; dateColIdx = c; }
   }
   if (dateColIdx < 0 || best < 3) return map;
-  // columna «Agua potable 25%» buscada en las primeras filas de encabezado
-  let potCol = -1;
-  for (let r = 0; r < Math.min(grid.length, 8) && potCol < 0; r++) {
+  // columnas «Agua potable 25%» y «Total consumo Pozos + Potable» por encabezado
+  let potCol = -1, totCol = -1;
+  for (let r = 0; r < Math.min(grid.length, 8); r++) {
     const row = grid[r] || [];
     for (let c = 0; c < row.length; c++) {
-      if (normLabel(row[c]).includes('agua potable 25')) { potCol = c; break; }
+      const lab = normLabel(row[c]);
+      if (potCol < 0 && lab.includes('agua potable 25')) potCol = c;
+      if (totCol < 0 && lab.includes('total consumo pozos')) totCol = c;
     }
   }
   if (potCol < 0) return map;
+  const numAt = (row, c) => (c >= 0 && typeof row[c] === 'number' && isFinite(row[c]) ? Math.max(0, row[c]) : 0);
   for (const row of grid) {
     if (!row) continue;
     const d = row[dateColIdx];
     if (!(d instanceof Date) || isNaN(d)) continue;
     const iso = toISODate(d);
     if (!iso) continue;
-    const v = row[potCol];
+    // Negativos (resets de medidor, ej. 28-may) se recortan a 0.
+    map.set(iso, { potable: numAt(row, potCol), totalPot: numAt(row, totCol) });
+  }
+  return map;
+}
+
+/* ─── G16 del árbol semanal: hoja 'Permeado- Servicio- Azucar', columna BF
+   («TOTAL») filtrada por la fecha de la columna AY. Se usa en el real de
+   «Agua Recuperación». Negativos recortados a 0. ─── */
+function permServRecupMap(wb) {
+  const map = new Map();
+  const ws = wb.Sheets['Permeado- Servicio- Azucar'];
+  if (!ws) return map;
+  const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, blankrows: true, defval: null });
+  const AY = 50, BF = 57; // columnas fijas (AY = fecha, BF = TOTAL) igual que la fórmula del Excel
+  for (const row of grid) {
+    if (!row) continue;
+    const d = row[AY];
+    if (!(d instanceof Date) || isNaN(d)) continue;
+    const iso = toISODate(d);
+    if (!iso) continue;
+    const v = row[BF];
     map.set(iso, typeof v === 'number' && isFinite(v) ? Math.max(0, v) : 0);
   }
   return map;
@@ -2227,11 +2264,17 @@ async function handleFile(e) {
           const e = lineMap.get(r.date);
           if (e) { r.prodLineas = e.lines; r.prodAllLines = e.total; r.owProduccion = e.ow; }
         });
-        // Agua potable 25% diaria desde la hoja "Pozos" (columna «Agua potable 25%»)
+        // Agua potable 25% y Total consumo Pozos+Potable diarios desde "Pozos"
         const potMap = pozosPotableMap(wb);
         if (potMap.size) records.forEach((r) => {
-          const v = potMap.get(r.date);
-          if (v !== undefined) r.aguaPotable.consumo = round1(v);
+          const e = potMap.get(r.date);
+          if (e) { r.aguaPotable.consumo = round1(e.potable); r.pozosTotalPot = round1(e.totalPot); }
+        });
+        // G16 (recuperación) desde 'Permeado- Servicio- Azucar' col BF / fecha AY
+        const g16Map = permServRecupMap(wb);
+        if (g16Map.size) records.forEach((r) => {
+          const v = g16Map.get(r.date);
+          if (v !== undefined) r.recupG16 = round1(v);
         });
       } else {
         const ws = wb.Sheets[wb.SheetNames[0]];
