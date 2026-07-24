@@ -1647,11 +1647,11 @@ function renderElaboracion(root) {
   // Agua Recuperación · Real = M19 / L3 (hoja «Arbol Agua Semanal 2»):
   //   M19 = (H3 − F16) − G16
   //     H3  = Σ Pozos!R  (Total consumo Pozos + Potable)  → r.pozosTotalPot
-  //     F16 = Σ Pozos!P  (Agua potable 25%)                → r.aguaPotable.consumo
+  //     F16 = Σ Pozos!P  (Agua potable 25%, crudo)         → r.potableRaw
   //     G16 = Σ 'Permeado- Servicio- Azucar'!BF (TOTAL)     → r.recupG16
   //   L3  = producción L1–L12 + PMIX del período           → prodAll
   const pozosTotalPot = sum(RECS.map((r) => r.pozosTotalPot ?? 0));
-  const potableSum = sum(RECS.map((r) => r.aguaPotable.consumo));
+  const potableSum = sum(RECS.map((r) => r.potableRaw ?? 0));
   const g16Sum = sum(RECS.map((r) => r.recupG16 ?? 0));
   const aguaRecupReal = safeDiv((pozosTotalPot - potableSum) - g16Sum, prodAll);
 
@@ -1888,7 +1888,8 @@ function emptyRecord(date) {
     servicios: { torres: 0, caldera1: 0, caldera2: 0, cip: 0, sanitarios: 0, riego: 0, otros: 0, condensadores: 0 },
     aguaPotable: { produccion: 0, consumo: 0, destinos: { proceso: 0, servicios: 0, casino: 0, sanitarios: 0 } },
     elaboracion: { produccion: 0, agua: 0 },
-    pozosTotalPot: 0, // Pozos!R «Total consumo Pozos + Potable» (para Agua Recuperación)
+    pozosTotalPot: 0, // Pozos!R «Total consumo Pozos + Potable» crudo (para Agua Recuperación)
+    potableRaw: 0,    // Pozos!P «Agua potable 25%» crudo, sin recortar (F16, Agua Recuperación)
     recupG16: 0,      // G16 del árbol semanal ('Permeado- Servicio- Azucar'!BF)
   };
   TODAS_LAS_LINEAS.forEach((l) => { r.lineas[l.id] = { agua: 0, produccion: 0 }; });
@@ -2142,22 +2143,24 @@ function pozosPotableMap(wb) {
     }
   }
   if (potCol < 0) return map;
-  const numAt = (row, c) => (c >= 0 && typeof row[c] === 'number' && isFinite(row[c]) ? Math.max(0, row[c]) : 0);
+  const rawAt = (row, c) => (c >= 0 && typeof row[c] === 'number' && isFinite(row[c]) ? row[c] : 0);
   for (const row of grid) {
     if (!row) continue;
     const d = row[dateColIdx];
     if (!(d instanceof Date) || isNaN(d)) continue;
     const iso = toISODate(d);
     if (!iso) continue;
-    // Negativos (resets de medidor, ej. 28-may) se recortan a 0.
-    map.set(iso, { potable: numAt(row, potCol), totalPot: numAt(row, totCol) });
+    const pRaw = rawAt(row, potCol), rRaw = rawAt(row, totCol);
+    // potable: recortada a >=0 (tarjeta Agua Potable). potableRaw y totalPot:
+    // valores crudos, sin recortar, para replicar el Excel en Agua Recuperación.
+    map.set(iso, { potable: Math.max(0, pRaw), potableRaw: pRaw, totalPot: rRaw });
   }
   return map;
 }
 
 /* ─── G16 del árbol semanal: hoja 'Permeado- Servicio- Azucar', columna BF
    («TOTAL») filtrada por la fecha de la columna AY. Se usa en el real de
-   «Agua Recuperación». Negativos recortados a 0. ─── */
+   «Agua Recuperación». Valores crudos (sin recortar) para replicar el Excel. ─── */
 function permServRecupMap(wb) {
   const map = new Map();
   const ws = wb.Sheets['Permeado- Servicio- Azucar'];
@@ -2171,7 +2174,7 @@ function permServRecupMap(wb) {
     const iso = toISODate(d);
     if (!iso) continue;
     const v = row[BF];
-    map.set(iso, typeof v === 'number' && isFinite(v) ? Math.max(0, v) : 0);
+    map.set(iso, typeof v === 'number' && isFinite(v) ? v : 0);
   }
   return map;
 }
@@ -2268,7 +2271,7 @@ async function handleFile(e) {
         const potMap = pozosPotableMap(wb);
         if (potMap.size) records.forEach((r) => {
           const e = potMap.get(r.date);
-          if (e) { r.aguaPotable.consumo = round1(e.potable); r.pozosTotalPot = round1(e.totalPot); }
+          if (e) { r.aguaPotable.consumo = round1(e.potable); r.potableRaw = round1(e.potableRaw); r.pozosTotalPot = round1(e.totalPot); }
         });
         // G16 (recuperación) desde 'Permeado- Servicio- Azucar' col BF / fecha AY
         const g16Map = permServRecupMap(wb);
