@@ -678,6 +678,13 @@ const POTABLE_BP = 0.05;      // presupuesto (BP) agua potable 25% ÷ producció
 const CIP_BP = 0.12;          // BP CIP
 const ENJUAGUE_BP = 0.02;     // BP enjuague de líneas
 // El BP combinado es la suma de ambos (mismo denominador de producción).
+// BP total de Elaboración y sus componentes (PROVISIONALES: los 4 últimos
+// están pendientes de mapear a datos; sus BP suman con CIP+Enjuague el total 0,9).
+const ELABORACION_BP = 0.9;   // BP total de elaboración (dado)
+const AGUA_RECUP_BP = 0.20;   // BP Agua Recuperación (provisional)
+const TRATAMIENTO_BP = 0.20;  // BP Tratamiento de agua (provisional)
+const PLANTA_RECUP_BP = 0.20; // BP Planta Recuperación (provisional)
+const PRODUCTO_BP = 0.16;     // BP Producto (provisional)
 // Líneas de producción de la hoja "Producciones" (todas y subconjunto One Way)
 const PROD_LINES_ALL = ['l1', 'l2', 'l3', 'l4', 'l5', 'l6', 'l7', 'l8', 'l9', 'l10', 'l11', 'l12', 'pmix'];
 const OW_PROD_LINES = ['l6', 'l7', 'l8', 'l9', 'l12', 'pmix'];
@@ -1518,7 +1525,6 @@ function renderServicios(root) {
     <div class="chart-grid">
       ${chartCard({ span: 7, title: 'Consumo diario por servicio', subtitle: 'Series apiladas (m³/día)', canvasId: 'ch-daily', height: 310 })}
       ${chartCard({ span: 5, title: 'Distribución porcentual del consumo', subtitle: 'Participación de cada servicio en el período', canvasId: 'ch-donut', height: 310 })}
-      ${chartCard({ span: 12, title: 'Consumo acumulado mensual', subtitle: 'Total de servicios por mes · últimos 12 meses', canvasId: 'ch-monthly', height: 290 })}
       ${chartCard({ span: 12, title: 'Detalle por servicio', subtitle: 'Consumo del período, participación y variación', body: '<div id="tbl-srv"></div>' })}
     </div>`;
 
@@ -1540,13 +1546,6 @@ function renderServicios(root) {
         tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${fmt(ctx.parsed, 0)} m³ (${fmtPct(totals[ctx.dataIndex].pct, 1)})` } },
       },
     },
-  });
-
-  const monthly = monthlySeries(HIST, { total: totalServicios });
-  makeChart('ch-monthly', {
-    type: 'bar',
-    data: { labels: monthly.map((m) => fmtMonthShort(m.month)), datasets: [barDataset('Servicios (m³)', monthly.map((m) => Math.round(m.total)), '#0891b2')] },
-    options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: tooltipNumber('m³', 0) } }, scales: scalesXY('m³', 0) },
   });
 
   renderTable('tbl-srv', [
@@ -1628,12 +1627,8 @@ function renderPotable(root) {
 
 /* ── 10.6 Elaboración ── */
 function renderElaboracion(root) {
-  const k = elabKpis(RECS);
-  const kp = elabKpis(PREV);
-  const dA = deltaPct(k.agua, kp.agua), dP = deltaPct(k.produccion, kp.produccion), dR = deltaPct(k.ratio, kp.ratio);
-
-  // CIP + Enjuague de líneas · BP vs Real. Real = Σ m³ del período ÷ Σ producción
-  // L1–L12 + PMIX (mismo criterio que Zona húmeda / Línea 10 / Agua Potable).
+  // Real = Σ m³ del período ÷ Σ producción L1–L12 + PMIX (mismo criterio que las
+  // demás tarjetas BP vs Real). CIP y Enjuague se toman de la hoja METROSCUB.
   const prodAll = sum(RECS.map((r) => r.prodAllLines ?? 0));
   const cipSum = sum(RECS.map((r) => r.cip.cip));
   const enjSum = sum(RECS.map((r) => r.cip.enjuague));
@@ -1641,6 +1636,14 @@ function renderElaboracion(root) {
   const enjReal = safeDiv(enjSum, prodAll);
   const bothReal = safeDiv(cipSum + enjSum, prodAll);
   const bothBP = CIP_BP + ENJUAGUE_BP;
+
+  // Componentes de Elaboración. Los que aún no están mapeados a datos van con
+  // real = null («—», por definir). El real de Elaboración es la suma de los
+  // componentes que ya tienen dato.
+  const compReals = [bothReal]; // CIP + Enjuague (único mapeado por ahora)
+  const mapped = compReals.filter((v) => v !== null);
+  const elabReal = mapped.length ? mapped.reduce((a, b) => a + b, 0) : null;
+
   const bpColor = (real, bp) => (real === null ? 'var(--text)' : (real <= bp ? 'var(--ok)' : 'var(--bad)'));
   const bpRealCard = (label, bp, real, foot) => `<div class="kpi-card" style="--kpi-accent:#9a3412">
       <div class="kpi-head"><span class="kpi-label">${label}</span></div>
@@ -1654,9 +1657,16 @@ function renderElaboracion(root) {
   root.innerHTML = `
     ${pageHeader('Elaboración', 'Preparación de jarabes y mezclas — consumo de agua y producción')}
     <div class="kpi-grid">
-      ${kpiCard({ label: 'Consumo de agua', value: k.agua, unit: 'm³', accent: '#1d4ed8', delta: dA, tone: evalDelta(dA, { deltaGood: 'down' }) })}
-      ${kpiCard({ label: 'Producto elaborado', value: k.produccion, unit: 'm³', accent: '#008300', delta: dP, tone: evalDelta(dP, { deltaGood: 'up' }) })}
-      ${kpiCard({ label: 'Ratio agua / producto', value: k.ratio, unit: 'L/L', decimals: 2, accent: '#c026d3', status: evalStatus(k.ratio, ELAB_RATIO), delta: dR, tone: evalDelta(dR, ELAB_RATIO), subtitle: `Meta ≤ ${fmt(ELAB_RATIO.ok, 2)} L/L` })}
+      <div class="kpi-card kpi-card-toggle" id="elab-toggle" style="--kpi-accent:#c026d3" role="button" tabindex="0" aria-expanded="false" aria-controls="elab-detalle" title="Toca para ver los componentes de elaboración">
+        <div class="kpi-head"><span class="kpi-label">Elaboración · BP vs Real</span><span class="toggle-caret" id="elab-caret">▸</span></div>
+        <div class="bp-kpi-rows">
+          <div class="bp-kpi-row"><span class="bp-kpi-name">BP</span><span class="bp-kpi-num">${fmt(ELABORACION_BP, 3)}</span></div>
+          <div class="bp-kpi-row"><span class="bp-kpi-name">real</span><span class="bp-kpi-num" style="color:${bpColor(elabReal, ELABORACION_BP)}">${fmt(elabReal, 3)}</span></div>
+        </div>
+        <div class="kpi-foot"><span class="kpi-target">Σ componentes ÷ producción L1–L12 + PMIX · toca para desglose</span></div>
+      </div>
+    </div>
+    <div class="kpi-grid" id="elab-detalle" hidden>
       <div class="kpi-card kpi-card-toggle" id="cip-toggle" style="--kpi-accent:#9a3412" role="button" tabindex="0" aria-expanded="false" aria-controls="cip-detalle" title="Toca para ver el desglose de CIP y Enjuague">
         <div class="kpi-head"><span class="kpi-label">CIP + Enjuague de líneas · BP vs Real</span><span class="toggle-caret" id="cip-caret">▸</span></div>
         <div class="bp-kpi-rows">
@@ -1665,25 +1675,32 @@ function renderElaboracion(root) {
         </div>
         <div class="kpi-foot"><span class="kpi-target">(CIP + Enjuague) ÷ producción L1–L12 + PMIX · toca para desglose</span></div>
       </div>
-    </div>
-    <div class="cip-detalle" id="cip-detalle" hidden>
-      ${bpRealCard('Enjuague de líneas · BP vs Real', ENJUAGUE_BP, enjReal, 'enjuague de líneas ÷ producción L1–L12 + PMIX')}
-      ${bpRealCard('CIP · BP vs Real', CIP_BP, cipReal, 'CIP ÷ producción L1–L12 + PMIX')}
+      ${bpRealCard('Agua Recuperación · BP vs Real', AGUA_RECUP_BP, null, 'por definir · pendiente de mapear')}
+      ${bpRealCard('Tratamiento de agua · BP vs Real', TRATAMIENTO_BP, null, 'por definir · pendiente de mapear')}
+      ${bpRealCard('Planta Recuperación · BP vs Real', PLANTA_RECUP_BP, null, 'por definir · pendiente de mapear')}
+      ${bpRealCard('Producto · BP vs Real', PRODUCTO_BP, null, 'por definir · pendiente de mapear')}
+      <div class="cip-detalle" id="cip-detalle" hidden style="grid-column:1/-1">
+        ${bpRealCard('Enjuague de líneas · BP vs Real', ENJUAGUE_BP, enjReal, 'enjuague de líneas ÷ producción L1–L12 + PMIX')}
+        ${bpRealCard('CIP · BP vs Real', CIP_BP, cipReal, 'CIP ÷ producción L1–L12 + PMIX')}
+      </div>
     </div>`;
 
-  const toggle = document.getElementById('cip-toggle');
-  const detalle = document.getElementById('cip-detalle');
-  const caret = document.getElementById('cip-caret');
-  const toggleDetalle = () => {
-    const show = detalle.hidden;
-    detalle.hidden = !show;
-    caret.textContent = show ? '▾' : '▸';
-    toggle.setAttribute('aria-expanded', String(show));
+  const wireToggle = (btnId, panelId, caretId) => {
+    const btn = document.getElementById(btnId);
+    const panel = document.getElementById(panelId);
+    const caret = document.getElementById(caretId);
+    if (!btn || !panel) return;
+    const t = () => {
+      const show = panel.hidden;
+      panel.hidden = !show;
+      if (caret) caret.textContent = show ? '▾' : '▸';
+      btn.setAttribute('aria-expanded', String(show));
+    };
+    btn.addEventListener('click', t);
+    btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); t(); } });
   };
-  toggle.addEventListener('click', toggleDetalle);
-  toggle.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDetalle(); }
-  });
+  wireToggle('elab-toggle', 'elab-detalle', 'elab-caret');
+  wireToggle('cip-toggle', 'cip-detalle', 'cip-caret');
 }
 
 /* ════════════════ 11. Navegación y filtros ════════════════ */
