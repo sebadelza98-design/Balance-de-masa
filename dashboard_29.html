@@ -703,6 +703,7 @@ const KPI_DEFS = {
   consumoPozos: { label: 'Consumo total pozos', unit: 'm³', decimals: 0, direction: 'volume', deltaGood: 'down', accent: '#1d4ed8' },
   consumoNano: { label: 'Consumo plantas Nano', unit: 'm³', decimals: 0, direction: 'volume', deltaGood: 'down', accent: '#a855f7' },
   rechazoNano: { label: '% Rechazo Nano', unit: '%', decimals: 1, direction: 'below', ok: 18, warn: 24, accent: '#db2777' },
+  sentina: { label: 'Sentina', unit: 'm³', decimals: 0, direction: 'volume', deltaGood: 'down', accent: '#c026d3' },
   recuperacionWUR: { label: '% Recuperación WUR', unit: '%', decimals: 1, direction: 'above', ok: 75, warn: 65, accent: '#14b8a6' },
   consumoCIP: { label: 'Agua CIP + Enjuague', unit: 'm³', decimals: 0, direction: 'volume', deltaGood: 'down', accent: '#9a3412' },
   eficienciaRO: { label: 'Eficiencia permeado RO', unit: '%', decimals: 1, direction: 'above', ok: 78, warn: 70, accent: '#ca8a04' },
@@ -961,6 +962,7 @@ function computePlantKpis(records) {
     rechazoNano: safeDiv(nanoRech * 100, nanoAlim),
     recuperacionWUR: safeDiv(wurRec * 100, wurAlim),
     consumoCIP: cip,
+    sentina: sum(records.map((r) => r.sentina ?? 0)),
     eficienciaRO: safeDiv(roPerm * 100, roAlim),
   };
 }
@@ -1228,7 +1230,7 @@ const dayLabels = () => RECS.map((r) => fmtDayShort(r.date));
 
 /* ── 10.1 Planta General ── */
 /* Indicadores que ofrece el selector de la tendencia diaria. */
-const KPI_ORDER = ['ratioAgua','produccion','consumoPozos','consumoNano','rechazoNano','recuperacionWUR','eficienciaRO'];
+const KPI_ORDER = ['ratioAgua','produccion','consumoPozos','consumoNano','sentina','rechazoNano','recuperacionWUR','eficienciaRO'];
 /* Tarjetas de la parte superior de Planta General. «% Rechazo Nano» no está
    aquí: vive en Elaboración, dentro del desglose de Nano filtración, que es
    donde el Mapa de Agua lo tiene (nodo «Rechazo», BP AM70 = 0,17). Sigue
@@ -2151,6 +2153,7 @@ function emptyRecord(date) {
     date,
     bebidaTotal: 0,
     zonaHumeda: 0,
+    sentina: 0,        // METROSCUB «SENTINA» (m³/día)
     owProduccion: 0,
     prodLineas: {},
     prodAllLines: 0,
@@ -2309,6 +2312,12 @@ function metroscubToRecords(wb) {
     torres: valsOf(incl('torres de enfriamiento')), cald1: valsOf(incl('caldera 1')), cald2: valsOf(incl('caldera 2')), otrosServ: valsOf(incl('otros servicios')),
     conden: valsOf(incl('condensadores evaporativos')),
     zonaHum: valsOf(exact('zona humeda')),
+    // Sentina: se toma de METROSCUB y no de 'Permeado- Servicio- Azucar'!DU
+    // («Total Descarga UD»), que es la otra vía. Ambas coinciden en junio
+    // (15.187 m³), pero en mayo la columna DU arrastra la fila de reseteo de
+    // totalizadores de fin de mes y suma −3,9 millones; la fila de METROSCUB
+    // está limpia.
+    sentina: valsOf(exact('sentina')),
     envL10: valsOf(exact('enviado l10')), envL11: valsOf(exact('enviado l11')),
   };
   const lineDefs = {
@@ -2325,6 +2334,7 @@ function metroscubToRecords(wb) {
     const r = emptyRecord(d.iso); const c = d.c;
     r.bebidaTotal = round1(R.bebida[c]);
     r.zonaHumeda = round1(R.zonaHum[c]);
+    r.sentina = round1(R.sentina[c]);
     r.enviadoL10 = round1(R.envL10[c]); r.enviadoL11 = round1(R.envL11[c]);
     r.pozos.pozo1 = round1(R.pozos[c]);
     r.aguaPotable.consumo = round1(Math.max(0, R.pozosPot[c] - R.pozos[c]));
