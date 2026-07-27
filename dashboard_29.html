@@ -516,8 +516,8 @@ input, select { font: inherit; }
           <input id="f-end" type="date" />
         </div>
         <div class="data-source">
-          <input id="xlsx-input" type="file" accept=".xlsx,.xls,.csv" hidden />
-          <button id="btn-load" class="ds-btn ds-btn-primary" title="Cargar datos desde un archivo Excel o CSV">Cargar Excel</button>
+          <input id="xlsx-input" type="file" accept=".xlsx,.xls,.csv" multiple hidden />
+          <button id="btn-load" class="ds-btn ds-btn-primary" title="Cargar uno o varios Mapas de Agua. Se pueden seleccionar varios meses a la vez, o ir añadiéndolos de a poco.">Cargar Excel</button>
           <button id="btn-template" class="ds-btn" title="Descargar plantilla con el formato esperado">Plantilla</button>
           <button id="btn-mock" class="ds-btn ds-btn-ghost" title="Quitar los datos cargados" hidden>Quitar datos</button>
         </div>
@@ -1266,14 +1266,74 @@ function renderPlanta(root) {
     <div class="kpi-foot"><span class="kpi-target">agua potable 25% ÷ producción L1–L12 + PMIX</span></div>
   </div>`;
 
+  /* ── Comparación mensual ──
+     Se arma sobre HIST (los últimos 12 meses cargados), no sobre el rango
+     seleccionado, para que siga mostrando la historia aunque las tarjetas
+     estén acotadas a un mes. Sólo aparece si hay más de un mes cargado. */
+  const monthly = monthlySeries(HIST, {
+    pozos: totalPozos,
+    potable: (r) => r.aguaPotable.consumo,
+    produccion: totalProduccion,
+    nano: (r) => r.nano.alimentacion,
+    cip: (r) => r.cip.cip + r.cip.enjuague,
+    dias: () => 1,
+  }).map((m) => ({ ...m, ratio: safeDiv(m.pozos + m.potable, m.produccion) }));
+  monthly.forEach((m, i) => {
+    const prev = i > 0 ? monthly[i - 1] : null;
+    m.dRatio = prev ? deltaPct(m.ratio, prev.ratio) : null;
+    m.mes = fmtMonthShort(m.month + '-01');
+  });
+  const hayComparacion = monthly.length > 1;
+  const comparacionHTML = hayComparacion ? `
+    <div class="chart-grid">
+      ${chartCard({ span: 7, title: 'Comparación mensual · Ratio agua / bebida',
+        subtitle: `${monthly.length} meses cargados · meta ≤ ${fmt(KPI_DEFS.ratioAgua.ok, 2)} L/L`, canvasId: 'ch-meses', height: 320 })}
+      ${chartCard({ span: 5, title: 'Captación y producción por mes',
+        subtitle: 'Pozos + agua potable frente a bebida producida (m³)', canvasId: 'ch-meses-vol', height: 320 })}
+      ${chartCard({ span: 12, title: 'Detalle mensual',
+        subtitle: 'Un renglón por mes cargado · Δ compara con el mes anterior', body: '<div id="tbl-meses"></div>' })}
+    </div>` : '';
+
   root.innerHTML = `
     ${pageHeader('Planta General', 'Balance hídrico global: captación, tratamiento, producción y servicios')}
     <div class="kpi-grid">${cards}${potableBpCard}</div>
+    ${comparacionHTML}
     <div class="chart-grid">
       ${chartCard({ span: 12, title: 'Tendencia diaria del indicador', subtitle: 'Comportamiento día a día dentro del período', canvasId: 'ch-trend', actions: `<select id="sel-kpi">${kpiOptions}</select>` })}
       ${chartCard({ span: 12, title: 'Distribución del consumo', subtitle: 'Participación por consumidor en el período', canvasId: 'ch-donut' })}
       ${chartCard({ span: 12, title: 'Ranking de consumidores de agua', subtitle: 'Principales consumidores del período (m³)', canvasId: 'ch-rank', height: 340 })}
     </div>`;
+
+  if (hayComparacion) {
+    const etiquetas = monthly.map((m) => m.mes);
+    makeChart('ch-meses', {
+      type: 'line',
+      data: { labels: etiquetas, datasets: [
+        lineDataset('Ratio agua / bebida', monthly.map((m) => (m.ratio === null ? null : +m.ratio.toFixed(3))), '#0891b2', { fillArea: true }),
+        metaDataset(KPI_DEFS.ratioAgua.ok, monthly.length, `Meta ${fmt(KPI_DEFS.ratioAgua.ok, 2)}`),
+      ] },
+      options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('L/L', 2) } }, scales: scalesXY('L/L', 2) },
+    });
+    makeChart('ch-meses-vol', {
+      type: 'bar',
+      data: { labels: etiquetas, datasets: [
+        barDataset('Pozos + potable', monthly.map((m) => Math.round(m.pozos + m.potable)), '#1d4ed8'),
+        barDataset('Bebida producida', monthly.map((m) => Math.round(m.produccion)), '#008300'),
+      ] },
+      options: { maintainAspectRatio: false, plugins: { tooltip: { callbacks: tooltipNumber('m³', 0) } }, scales: scalesXY('m³', 0) },
+    });
+    renderTable('tbl-meses', [
+      { key: 'mes', label: 'Mes', html: (r) => r.mes },
+      { key: 'dias', label: 'Días', num: true, html: (r) => fmt(r.dias, 0) },
+      { key: 'pozos', label: 'Pozos m³', num: true, html: (r) => fmt(r.pozos, 0) },
+      { key: 'potable', label: 'Agua potable m³', num: true, html: (r) => fmt(r.potable, 0) },
+      { key: 'produccion', label: 'Bebida m³', num: true, html: (r) => fmt(r.produccion, 0) },
+      { key: 'nano', label: 'Nano m³', num: true, html: (r) => fmt(r.nano, 0) },
+      { key: 'cip', label: 'CIP + enj. m³', num: true, html: (r) => fmt(r.cip, 0) },
+      { key: 'ratio', label: 'Ratio L/L', num: true, html: (r) => `<span class="delta ${evalStatus(r.ratio, KPI_DEFS.ratioAgua) === 'ok' ? 'good' : 'bad'}">${fmt(r.ratio, 3)}</span>` },
+      { key: 'dRatio', label: 'Δ ratio', num: true, html: (r) => deltaBadge(r.dRatio, evalDelta(r.dRatio, KPI_DEFS.ratioAgua)) },
+    ], monthly, 'month', 'asc');
+  }
 
   /* Tendencia diaria con selector */
   let trendChart = null;
@@ -2536,24 +2596,53 @@ function showError(msg) {
   const st = document.getElementById('ds-status');
   if (st) { st.textContent = msg; st.classList.add('error'); } else alert(msg);
 }
+/* Aviso informativo: mismo sitio que el error, sin el estilo de error. */
+function showNotice(msg) {
+  const st = document.getElementById('ds-status');
+  if (st) { st.textContent = msg; st.classList.remove('error'); }
+}
 
-function applyExcelData(records, fileName) {
+/* Archivos cargados en esta sesión (para la etiqueta de origen). */
+const LOADED_FILES = new Set();
+
+function applyExcelData(records) {
   EXCEL_DATA = new Map(records.map((r) => [r.date, r]));
   AVAILABLE.min = records[0].date;
   AVAILABLE.max = records[records.length - 1].date;
-  state.start = AVAILABLE.min;
-  state.end = AVAILABLE.max;
+  // Con varios meses cargados el rango arranca en el último mes con datos de
+  // verdad: las tarjetas hablan del mes más reciente y la comparación mensual
+  // de Planta General enseña la serie histórica. Con un solo mes se mantiene
+  // el comportamiento de siempre (todo el archivo).
+  const diasPorMes = new Map();
+  for (const r of records) diasPorMes.set(monthKey(r.date), (diasPorMes.get(monthKey(r.date)) ?? 0) + 1);
+  const meses = [...diasPorMes.keys()].sort();
+  if (meses.length > 1) {
+    // Los Mapas de Agua traen un bloque fijo de 31 columnas, así que un mes de
+    // 30 días desborda uno o dos días sobre el siguiente. Ese resto no es un
+    // mes: se salta para no abrir el dashboard sobre una muestra de un día.
+    const conDatos = meses.filter((m) => diasPorMes.get(m) >= 5);
+    const ultimo = (conDatos.length ? conDatos : meses)[(conDatos.length ? conDatos : meses).length - 1];
+    state.start = clampISO(ultimo + '-01', AVAILABLE.min, AVAILABLE.max);
+    state.end = clampISO(endOfMonth(ultimo + '-01'), AVAILABLE.min, AVAILABLE.max);
+  } else {
+    state.start = AVAILABLE.min;
+    state.end = AVAILABLE.max;
+  }
   refreshFilterBounds();
   reloadData();
   syncFilterInputs();
   renderNav();
   renderPage();
-  setSource(`${fileName} · ${records.length} días · ${fmtDateLong(AVAILABLE.min)} – ${fmtDateLong(AVAILABLE.max)}`, true);
+  const nf = LOADED_FILES.size;
+  const origen = nf === 1 ? [...LOADED_FILES][0] : `${nf} archivos`;
+  const alcance = meses.length > 1 ? ` · ${meses.length} meses` : '';
+  setSource(`${origen}${alcance} · ${records.length} días · ${fmtDateLong(AVAILABLE.min)} – ${fmtDateLong(AVAILABLE.max)}`, true);
   document.getElementById('btn-mock').hidden = false;
 }
 
 function revertToMock() {
   EXCEL_DATA = null;
+  LOADED_FILES.clear();
   AVAILABLE.min = MIN_DATE;
   AVAILABLE.max = todayISO();
   state.start = startOfMonth(todayISO());
@@ -2592,12 +2681,11 @@ function downloadTemplate() {
   }
 }
 
-async function handleFile(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  try {
-    const name = file.name.toLowerCase();
-    let records;
+/* Lee UN archivo y devuelve sus registros diarios. Lanza si no hay nada usable. */
+async function readOneFile(file) {
+  const name = file.name.toLowerCase();
+  let records;
+  {
     if (!name.endsWith('.csv') && typeof XLSX !== 'undefined') {
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
       if (wb.SheetNames.includes('METROSCUB')) {
@@ -2650,11 +2738,44 @@ async function handleFile(e) {
     } else {
       records = aoaToRecords(await readTabular(file));
     }
-    if (!records.length) throw new Error('No se encontraron datos válidos (ni hoja METROSCUB ni plantilla con columna «fecha»).');
-    applyExcelData(records, file.name);
-  } catch (err) {
-    showError('Error al leer el archivo: ' + err.message);
-    e.target.value = '';
+  }
+  if (!records.length) throw new Error('No se encontraron datos válidos (ni hoja METROSCUB ni plantilla con columna «fecha»).');
+  return records;
+}
+
+/* Carga uno o varios Mapas de Agua. Los archivos se ACUMULAN sobre lo que ya
+   estuviera cargado (mismo día en dos archivos ⇒ gana el último leído), de
+   modo que se pueden ir sumando meses para compararlos. «Quitar datos» vacía
+   todo. */
+async function handleFile(e) {
+  const files = [...(e.target.files || [])];
+  if (!files.length) return;
+  const errores = [];
+  let añadidos = 0, solapados = 0;
+  const merged = new Map(EXCEL_DATA || []);
+  for (const file of files) {
+    try {
+      const records = await readOneFile(file);
+      for (const r of records) {
+        if (merged.has(r.date)) solapados++;
+        merged.set(r.date, r);
+      }
+      LOADED_FILES.add(file.name);
+      añadidos++;
+    } catch (err) {
+      errores.push(`${file.name}: ${err.message}`);
+    }
+  }
+  e.target.value = '';
+  if (!merged.size) {
+    showError('Error al leer el archivo: ' + (errores[0] || 'sin datos'));
+    return;
+  }
+  applyExcelData([...merged.values()].sort((a, b) => (a.date < b.date ? -1 : 1)));
+  if (errores.length) {
+    showError(`${errores.length} archivo(s) no se pudieron leer — ${errores.join(' · ')}`);
+  } else if (solapados) {
+    showNotice(`${añadidos} archivo(s) cargados · ${solapados} día(s) venían repetidos, se conservó el último leído.`);
   }
 }
 
