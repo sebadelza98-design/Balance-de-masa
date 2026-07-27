@@ -256,6 +256,34 @@ input, select { font: inherit; }
 .ds-btn-primary { background: var(--accent-soft); border-color: rgba(8, 145, 178, .35); color: var(--accent); font-weight: 600; }
 .ds-btn-primary:hover { background: rgba(8, 145, 178, .2); }
 .ds-btn-ghost { color: var(--text-dim); }
+/* Semáforo de confianza del dato */
+.dq-bar { margin: 14px 22px -6px; border: 1px solid var(--border); border-left-width: 4px;
+  border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow); font-size: 12.5px; }
+.dq-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 13px; cursor: pointer; }
+.dq-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dq-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.dq-title { font-weight: 600; }
+.dq-meta { color: var(--text-dim); }
+.dq-caret { margin-left: auto; color: var(--text-faint); font-size: 11px; }
+.dq-bar.ok   { border-left-color: var(--ok); }
+.dq-bar.warn { border-left-color: var(--warn); }
+.dq-bar.bad  { border-left-color: var(--bad); }
+.dq-bar.ok   .dq-dot { background: var(--ok); }
+.dq-bar.warn .dq-dot { background: var(--warn); }
+.dq-bar.bad  .dq-dot { background: var(--bad); }
+.dq-body { padding: 0 13px 11px; border-top: 1px solid var(--border-soft); }
+.dq-item { padding: 9px 0; border-bottom: 1px dashed var(--border-soft); }
+.dq-item:last-child { border-bottom: 0; }
+.dq-item-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.dq-sev { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 999px; }
+.dq-sev.alta  { color: var(--bad); background: var(--bad-soft); }
+.dq-sev.media { color: var(--warn); background: var(--warn-soft); }
+.dq-item-txt { color: var(--text-dim); margin-top: 3px; line-height: 1.45; }
+.dq-dias { color: var(--text-faint); margin-top: 3px; }
+@media (max-width: 720px) { .dq-bar { margin: 12px 14px -4px; } }
+
 .ds-status { flex-basis: 100%; font-size: 11.5px; color: var(--text-dim); }
 .ds-status:empty { display: none; }
 .ds-status.error { color: var(--bad); }
@@ -529,6 +557,7 @@ input, select { font: inherit; }
       </div>
     </header>
 
+    <div id="dq-bar" class="dq-bar" hidden></div>
     <main id="page-root" class="page"></main>
   </div>
 </div>
@@ -1029,6 +1058,98 @@ function indicatorReals(records) {
   const otros = Math.max(0, planta - (retornable + oneWay + linea10 + servicios + potable + elaboracion));
   return { planta, retornable, oneWay, linea10, servicios, potable, elaboracion, otros };
 }
+/* ════════════════ Semáforo de confianza del dato ════════════════
+   Revisa los registros del período y detecta los defectos que sabemos que
+   trae el Mapa de Agua. La idea no es corregir el dato —eso es criterio de
+   planta— sino que quien mira el dashboard sepa sobre qué está decidiendo.
+
+   Un día se considera FIABLE si no le toca ninguna incidencia grave. El
+   porcentaje de días fiables define el nivel del semáforo. */
+const DQ_LINEAS = ['L1', 'L2', 'L3', 'L4', 'L5', 'L11'];
+
+function dataQuality(records) {
+  if (!records.length) return null;
+  const inc = [];                        // incidencias detectadas
+  const diasMalos = new Set();           // días que dejan de ser fiables
+
+  const add = (id, sev, titulo, dias, explica) => {
+    if (!dias.length) return;
+    inc.push({ id, sev, titulo, dias, explica });
+    if (sev === 'alta') dias.forEach((d) => diasMalos.add(d));
+  };
+
+  // 1. Producción registrada pero captación en cero: el ratio del día sale
+  //    artificialmente bajo y arrastra el promedio del período.
+  add('prod-sin-agua', 'alta', 'Producción sin consumo de agua',
+    records.filter((r) => totalProduccion(r) > 0 && totalPozos(r) === 0).map((r) => r.date),
+    'Hay bebida producida pero la captación de pozos figura en cero. El ratio de esos días baja de forma artificial.');
+
+  // 2. Valores negativos en las celdas de origen. Se separan por magnitud
+  //    porque no son el mismo problema: un negativo de millones es el
+  //    contador que volvió a cero y arruina cualquier suma del período; uno
+  //    pequeño suele ser una corrección o un error de lectura puntual.
+  const CRUDOS = [
+    ['Pozos + potable', (r) => r.pozosTotalPot], ['Agua potable 25%', (r) => r.potableRaw],
+    ['Filtros multimedia', (r) => r.recupG16], ['Rechazo FMM', (r) => r.tree?.j13],
+    ['Consumo pozos', (r) => totalPozos(r)], ['Sentina', (r) => r.sentina],
+  ];
+  const UMBRAL_RESET = -100000;
+  const peorDe = (r) => Math.min(...CRUDOS.map(([, f]) => f(r) ?? 0));
+  const nombresEn = (dias, filtro) => [...new Set(records
+    .filter((r) => dias.includes(r.date))
+    .flatMap((r) => CRUDOS.filter(([, f]) => filtro(f(r) ?? 0)).map(([n]) => n)))];
+
+  const reset = records.filter((r) => peorDe(r) <= UMBRAL_RESET).map((r) => r.date);
+  add('reseteo', 'alta', 'Reseteo de totalizadores', reset,
+    `Un contador volvió a cero y la resta contra el día anterior quedó como un negativo de millones (${nombresEn(reset, (v) => v <= UMBRAL_RESET).join(', ')}). Arruina cualquier acumulado que incluya ese día.`);
+
+  const negs = records.filter((r) => peorDe(r) < 0 && peorDe(r) > UMBRAL_RESET).map((r) => r.date);
+  add('negativos', 'media', 'Consumos negativos puntuales', negs,
+    `Hay consumo diario negativo, que no es físicamente posible (${nombresEn(negs, (v) => v < 0 && v > UMBRAL_RESET).join(', ')}). Suele ser una corrección manual o un error de lectura, y resta del acumulado del mes.`);
+
+  // 3. Retroceso del totalizador de una lavadora: la hoja fuerza consumo 0
+  //    ese día, así que se pierde agua realmente consumida.
+  const retro = [];
+  for (let i = 1; i < records.length; i++) {
+    const hoy = records[i].lavTot, ayer = records[i - 1].lavTot;
+    if (!hoy || !ayer) continue;
+    // Tolerancia de 1 m³: bajadas menores son el operador redondeando la
+    // lectura (94.570,451 → 94.570), no un cambio de medidor.
+    const cuales = DQ_LINEAS.filter((_, j) => hoy[j] !== null && ayer[j] !== null && ayer[j] - hoy[j] > 1);
+    if (cuales.length) retro.push({ date: records[i].date, cuales });
+  }
+  add('lav-retro', 'media', 'Totalizador de lavadora hacia atrás',
+    retro.map((x) => x.date),
+    `El medidor retrocedió (${[...new Set(retro.flatMap((x) => x.cuales))].join(', ')}) y la hoja anota consumo 0 ese día: se pierde agua realmente consumida.`);
+
+  // 4. Series enteras sin registro en todo el período: el indicador que
+  //    dependa de ellas mostrará 0 o «—» y puede leerse como un mal resultado.
+  const SERIES = [
+    ['Permeado RO', (r) => r.ro.permeado], ['Alimentación RO', (r) => r.ro.alimentacion],
+    ['Zona húmeda', (r) => r.zonaHumeda], ['Sentina', (r) => r.sentina],
+    ['CIP', (r) => r.cip.cip], ['Enjuague de líneas', (r) => r.cip.enjuague],
+  ];
+  const vacias = SERIES.filter(([, f]) => records.every((r) => (f(r) ?? 0) === 0)).map(([n]) => n);
+  if (vacias.length) {
+    inc.push({ id: 'sin-registro', sev: 'media', titulo: 'Medidores sin registro en el período',
+      dias: [], explica: `Sin ningún dato en todo el rango: ${vacias.join(' · ')}. Los indicadores que dependan de ellos aparecen en cero, que no es lo mismo que un consumo de cero.` });
+  }
+
+  // 5. Cobertura: días del rango que no traen ni agua ni producción.
+  add('sin-dato', 'media', 'Días sin ningún dato',
+    records.filter((r) => totalPozos(r) === 0 && totalProduccion(r) === 0).map((r) => r.date),
+    'Ni captación ni producción. Suelen ser días de planta parada, pero también aparecen así los días que todavía no se cargaron.');
+
+  const fiables = records.length - diasMalos.size;
+  const pct = (fiables / records.length) * 100;
+  const altas = inc.filter((i) => i.sev === 'alta').length;
+  const medias = inc.filter((i) => i.sev === 'media').length;
+  // Sólo las incidencias graves invalidan días, pero una sola ya baja el
+  // nivel: un reseteo de contador basta para arruinar los acumulados del mes.
+  const nivel = (pct < 90 || altas >= 2) ? 'bad' : (altas || medias > 1) ? 'warn' : 'ok';
+  return { nivel, pct, fiables, total: records.length, altas, medias, incidencias: inc };
+}
+
 /* Filas de la tabla «Estado de Indicadores»: BP, Real y Gap por área. */
 function indicatorStatusRows(records) {
   const real = indicatorReals(records);
@@ -2035,8 +2156,57 @@ function renderNav() {
   );
 }
 
+/* Franja de confianza del dato. Se dibuja fuera de la página para que
+   acompañe a todas las pestañas: la advertencia vale para cualquier número
+   del dashboard, no sólo para el de Planta General. */
+let DQ_ABIERTO = false;
+function renderDataQuality() {
+  const bar = document.getElementById('dq-bar');
+  if (!bar) return;
+  const q = dataQuality(RECS);
+  if (!q) { bar.hidden = true; bar.innerHTML = ''; return; }
+  bar.hidden = false;
+  bar.className = 'dq-bar ' + q.nivel;
+  const rotulo = { ok: 'Confianza del dato: alta', warn: 'Confianza del dato: media', bad: 'Confianza del dato: baja' }[q.nivel];
+  const nInc = q.incidencias.length;
+  const resumen = nInc
+    ? [q.altas ? `${q.altas} grave${q.altas > 1 ? 's' : ''}` : '', q.medias ? `${q.medias} menor${q.medias > 1 ? 'es' : ''}` : '']
+        .filter(Boolean).join(' · ')
+    : 'sin incidencias';
+  const detalle = q.incidencias.map((i) => `
+    <div class="dq-item">
+      <div class="dq-item-head">
+        <span class="dq-sev ${i.sev}">${i.sev}</span><strong>${i.titulo}</strong>
+        ${i.dias.length ? `<span class="dq-meta">${i.dias.length} día${i.dias.length > 1 ? 's' : ''}</span>` : ''}
+      </div>
+      <div class="dq-item-txt">${i.explica}</div>
+      ${i.dias.length ? `<div class="dq-dias">${i.dias.slice(0, 8).map(fmtDayShort).join(' · ')}${i.dias.length > 8 ? ` … +${i.dias.length - 8}` : ''}</div>` : ''}
+    </div>`).join('');
+  bar.innerHTML = `
+    <div class="dq-head" id="dq-head" role="button" tabindex="0" aria-expanded="${DQ_ABIERTO}" aria-controls="dq-body">
+      <span class="dq-dot"></span>
+      <span class="dq-title">${rotulo}</span>
+      <span class="dq-meta">${q.fiables} de ${q.total} días fiables (${fmtPct(q.pct, 0)}) · ${resumen}</span>
+      ${nInc ? `<span class="dq-caret" id="dq-caret">${DQ_ABIERTO ? '▾' : '▸'}</span>` : ''}
+    </div>
+    ${nInc ? `<div class="dq-body" id="dq-body" ${DQ_ABIERTO ? '' : 'hidden'}>${detalle}</div>` : ''}`;
+  if (!nInc) return;
+  const head = document.getElementById('dq-head');
+  const body = document.getElementById('dq-body');
+  const caret = document.getElementById('dq-caret');
+  const toggle = () => {
+    DQ_ABIERTO = body.hidden;
+    body.hidden = !DQ_ABIERTO;
+    caret.textContent = DQ_ABIERTO ? '▾' : '▸';
+    head.setAttribute('aria-expanded', String(DQ_ABIERTO));
+  };
+  head.addEventListener('click', toggle);
+  head.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+}
+
 function renderPage() {
   destroyCharts();
+  renderDataQuality();
   const root = document.getElementById('page-root');
   PAGES[state.page].render(root);
   window.scrollTo({ top: 0 });
@@ -2154,6 +2324,7 @@ function emptyRecord(date) {
     bebidaTotal: 0,
     zonaHumeda: 0,
     sentina: 0,        // METROSCUB «SENTINA» (m³/día)
+    lavTot: null,      // lecturas de totalizador de lavadoras (para el semáforo de confianza)
     owProduccion: 0,
     prodLineas: {},
     prodAllLines: 0,
@@ -2617,6 +2788,27 @@ function eficAjusteMap(wb) {
   return map;
 }
 
+/* ─── Totalizadores de lavadoras (Lavadoras!D:I, fecha en la columna C).
+   No se usan para calcular nada: sirven para el semáforo de confianza. La
+   hoja obtiene el consumo diario con SI(hoy−ayer>=0 ; hoy−ayer ; 0), así que
+   cuando un medidor retrocede —cambio de equipo, reseteo, corrección— ese día
+   queda anotado con consumo 0 y se pierde agua real sin que nada avise. ─── */
+function lavadorasTotalMap(wb) {
+  const map = new Map();
+  const ws = wb.Sheets['Lavadoras'];
+  if (!ws) return map;
+  const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, blankrows: true, defval: null });
+  const C = 2, COLS = [3, 4, 5, 6, 7, 8];  // C = fecha · D..I = totalizadores L1,L2,L3,L4,L5,L11
+  for (const row of grid) {
+    if (!row) continue;
+    const d = row[C];
+    if (!(d instanceof Date) || isNaN(d)) continue;
+    const iso = toISODate(d);
+    if (iso) map.set(iso, COLS.map((c) => (typeof row[c] === 'number' && isFinite(row[c]) ? row[c] : null)));
+  }
+  return map;
+}
+
 /* ─── Reúso de lavadoras (R10 = Σ Lavadoras!R por fecha en columna L). ─── */
 function lavadorasReuseMap(wb) {
   const map = new Map();
@@ -2779,6 +2971,12 @@ async function readOneFile(file) {
         if (lavMap.size) records.forEach((r) => {
           const v = lavMap.get(r.date);
           if (v !== undefined) r.tree.lavR = round1(v);
+        });
+        // Totalizadores de lavadoras (sólo para el semáforo de confianza)
+        const lavTotMap = lavadorasTotalMap(wb);
+        if (lavTotMap.size) records.forEach((r) => {
+          const v = lavTotMap.get(r.date);
+          if (v) r.lavTot = v;
         });
         // K28 «Diferencia Ajustable» de EFIC-OEE (tercer sumando de L3)
         const ajusteMap = eficAjusteMap(wb);
