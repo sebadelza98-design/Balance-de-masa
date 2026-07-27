@@ -712,18 +712,36 @@ const LINE_BP_FACTOR = 0.14;  // factor de presupuesto (BP) por línea, igual pa
 const ZONA_HUMEDA_BP = 0.05;  // presupuesto (BP) zona húmeda ÷ producción total (todas las líneas)
 const LINEA10_BP = 0.07;      // presupuesto (BP) merma L10 ÷ producción total (L1–L12 + PMIX)
 const POTABLE_BP = 0.05;      // presupuesto (BP) agua potable 25% ÷ producción total (L1–L12 + PMIX)
-// Presupuestos (BP) de CIP y Enjuague ÷ producción total (L1–L12 + PMIX).
-// PROVISIONALES: ajustar a los valores reales de presupuesto cuando se confirmen.
-const CIP_BP = 0.12;          // BP CIP
-const ENJUAGUE_BP = 0.02;     // BP enjuague de líneas
-// El BP combinado es la suma de ambos (mismo denominador de producción).
-// BP total de Elaboración y sus componentes (PROVISIONALES: los 4 últimos
-// están pendientes de mapear a datos; sus BP suman con CIP+Enjuague el total 0,9).
-const ELABORACION_BP = 0.9;   // BP total de elaboración (dado)
-const AGUA_RECUP_BP = -0.20;  // BP Agua Recuperación (descuento por reúso, negativo)
-const TRATAMIENTO_BP = 0.20;  // BP Tratamiento de agua (provisional)
-const PLANTA_RECUP_BP = 0.20; // BP Planta Recuperación (provisional)
-const PRODUCTO_BP = 0.16;     // BP Producto (provisional)
+/* Presupuestos (BP) del árbol de Elaboración, tomados de la hoja «Arbol Agua
+   Semanal 2» del Mapa de Agua. Cada comentario indica la celda de origen.
+   Los nodos padre NO se fijan aquí: se calculan sumando sus hijos, igual que
+   hace el Excel (p.ej. AG64 = AM49+AM53+AM58+AM68+AM78). */
+const ELAB_BP = {
+  enjuague: 0.022,      // AM41
+  cip: 0.10,            // AM45
+  multimedia: 0.02,     // AM49
+  azud: 0.01,           // AM53
+  agPlus: 0.01,         // AM58
+  nano: 0.0,            // AM68 = K3 × AM70 (K3 «BP Mes Ratio» viene vacío)
+  abatidores: 0.0,      // AM78
+  aguaRecup: -0.20,     // AG47
+  plantaRecup: -0.11,   // AG82
+  recPlanta1: 0.4,      // AM82
+  recPlanta2: 0.5,      // AM87
+  ozonificador: 0.08,   // AS93
+  mezclaSub: 0.18,      // AS97
+  roPequena: 0.01,      // AM91
+  azucar: 0.05,         // AM101
+  postMix: 0.02,        // AM107
+  estPrep: 0.97 * 0.05, // AM110
+  estPrepCadaUna: 0.02, // AS107 / AS110 / AS113
+  matriz500: 1.7 * 0.01,// AM113
+};
+// AM96 = AS93 + AS97 · AM104 = 1 − AS93 − AS97 − AM107 − AM101
+ELAB_BP.mezcla = ELAB_BP.ozonificador + ELAB_BP.mezclaSub;
+ELAB_BP.desaireadores = 1 - ELAB_BP.ozonificador - ELAB_BP.mezclaSub - ELAB_BP.postMix - ELAB_BP.azucar;
+ELAB_BP.wur1 = ELAB_BP.plantaRecup * 0.82;              // AM81
+ELAB_BP.wur2 = ELAB_BP.plantaRecup - ELAB_BP.wur1;      // AM86 = AG82 − AM81
 // Líneas de producción de la hoja "Producciones" (todas y subconjunto One Way)
 const PROD_LINES_ALL = ['l1', 'l2', 'l3', 'l4', 'l5', 'l6', 'l7', 'l8', 'l9', 'l10', 'l11', 'l12', 'pmix'];
 const OW_PROD_LINES = ['l6', 'l7', 'l8', 'l9', 'l12', 'pmix'];
@@ -1666,57 +1684,84 @@ function renderPotable(root) {
 
 /* ── 10.6 Elaboración ── */
 function renderElaboracion(root) {
-  // Real = Σ m³ del período ÷ Σ producción L1–L12 + PMIX (mismo criterio que las
-  // demás tarjetas BP vs Real). CIP y Enjuague se toman de la hoja METROSCUB.
-  const prodAll = sum(RECS.map((r) => r.prodAllLines ?? 0));
-  const cipSum = sum(RECS.map((r) => r.cip.cip));
-  const enjSum = sum(RECS.map((r) => r.cip.enjuague));
-  const cipReal = safeDiv(cipSum, prodAll);
-  const enjReal = safeDiv(enjSum, prodAll);
-  const bothReal = safeDiv(cipSum + enjSum, prodAll);
-  const bothBP = CIP_BP + ENJUAGUE_BP;
-
-  // Agua Recuperación · Real = M19 / L3 (hoja «Arbol Agua Semanal 2»):
-  //   M19 = (H3 − F16) − G16
-  //     H3  = Σ Pozos!R  (Total consumo Pozos + Potable)  → r.pozosTotalPot
-  //     F16 = Σ Pozos!P  (Agua potable 25%, crudo)         → r.potableRaw
-  //     G16 = Σ 'Permeado- Servicio- Azucar'!BF (TOTAL)     → r.recupG16
-  //   L3  = producción L1–L12 + PMIX del período           → prodAll
-  const pozosTotalPot = sum(RECS.map((r) => r.pozosTotalPot ?? 0));
-  const potableSum = sum(RECS.map((r) => r.potableRaw ?? 0));
-  const g16Sum = sum(RECS.map((r) => r.recupG16 ?? 0));
-  const aguaRecupReal = safeDiv((pozosTotalPot - potableSum) - g16Sum, prodAll);
-
-  // ── Árbol de tratamiento (replica «Arbol Agua Semanal 2»). Sumas de origen. ──
-  const hasData = !!EXCEL_DATA;
+  /* ── Celdas base del árbol semanal, sumadas sobre el período seleccionado.
+     Cada SUMIFS(...) del Excel equivale aquí a sumar el valor diario de los
+     días del rango. El nombre de cada constante es la celda de «Arbol Agua
+     Semanal 2» que representa, para poder cotejarlo contra el Excel. ── */
   const T = (k) => sum(RECS.map((r) => r.tree?.[k] ?? 0));
-  const Scd = T('cd'), Sce = T('ce'), Scz = T('cz'), Sdx = T('dx'), Sdy = T('dy'),
-        Seb = T('eb'), Sec = T('ec'), Scp = T('cp'), Scr = T('cr'), Ss = T('s'), St = T('t'), SlavR = T('lavR');
-  // Nano filtración: Rechazo Nano 1/2 ÷ 100.000 (G3, tal cual el Excel)
-  const nanoF1 = safeDiv(Scd, 100000), nanoF2 = safeDiv(Sce, 100000), nanoFilt = safeDiv(Scd + Sce, 100000);
-  const agPlus = safeDiv(Scz, prodAll);                    // AN58 = O19/L3
-  const recupPl1 = safeDiv(Sdy, Sdx);                      // AN82 = I25/H25
-  const recupPl2 = safeDiv(Seb, Seb + Sec);                // AN87 = M25/(M25+N25)
-  // Mezcla Producto: AN96 = (H22 − AH32 − AH24)/L3
-  const AH32 = safeDiv(Ss + St, prodAll);                  // L10/L3
-  const AH24 = safeDiv(SlavR, pozosTotalPot);              // R10/H3
-  const mezclaReal = safeDiv((Scp - Scr) - (AH32 ?? 0) - (AH24 ?? 0), prodAll);
-  // Filtro Multimedia (G16 del árbol semanal, fila «FFMM»): total del período
-  // y detalle por filtro, ambos ÷ producción L1–L12 + PMIX, igual que AG Plus.
+  const H3 = sum(RECS.map((r) => r.pozosTotalPot ?? 0));   // SUMIFS(Pozos!R)
+  const F16 = sum(RECS.map((r) => r.potableRaw ?? 0));     // SUMIFS(Pozos!P)
+  const G16 = sum(RECS.map((r) => r.recupG16 ?? 0));       // SUMIFS(Permeado!BF)
+  const K28 = T('k28');                                    // SUMIFS('EFIC-OEE.'!56)
+  const P10 = T('p10'), P13 = T('p13'), H13 = T('h13'), Q13 = T('q13'), J13 = T('j13');
+  const K13 = T('cd'), L13 = T('ce'), N19 = T('n19'), O19 = T('cz');
+  const K16 = T('k16'), L16 = T('l16'), G22 = T('g22'), L25 = T('l25');
+  const K22 = T('cp'), J22 = T('cr'), I28 = T('i28');
+  const F28 = T('f28'), G28 = T('g28'), H28 = T('h28');
+  const H25 = T('dx'), I25 = T('dy'), M25 = T('eb'), N25 = T('ec');
+  const M10 = T('s'), N10 = T('t'), R10 = T('lavR');
+  const L10 = M10 + N10;                                   // L10 = M10 + N10
+  const M19 = (H3 - F16) - G16;                            // M19 = (H3 − F16) − G16
+  const H22 = K22 - J22;                                   // H22 = K22 − J22
+  // L3 = M3 + N3 + K28 = Σ producción L1–L12 + PMIX + «Diferencia Ajustable».
+  const L3 = sum(RECS.map((r) => r.prodAllLines ?? 0)) + K28;
+
+  const hasData = !!EXCEL_DATA && L3 > 0;
+  const bp = (v) => (hasData ? v : null);                  // BP sólo con datos cargados
+  const d = (x) => (hasData ? x / L3 : null);              // «… ÷ L3»
+  const add = (...xs) => (xs.some((v) => v === null || v === undefined || Number.isNaN(v))
+    ? null : xs.reduce((a, b) => a + b, 0));
+  const B = ELAB_BP;
+
+  // ── CIP + Enjuagues de líneas (AG43 / AH43) ──
+  const enjReal = d(P10);                                  // AN41 = P10/L3
+  const cipReal = d(H13);                                  // AN45 = H13/L3
+  const cipEnjReal = add(enjReal, cipReal);
+  const cipEnjBP = B.enjuague + B.cip;
+
+  // ── Tratamiento de agua (AG64 / AH64) ──
+  const fmmReal = d(P13);                                  // AN49 = P13/L3
   const nFmm = RECS.reduce((m, r) => Math.max(m, (r.fmm || []).length), 0);
   const fmmSums = Array.from({ length: nFmm }, (_, i) => sum(RECS.map((r) => (r.fmm || [])[i] ?? 0)));
-  const fmmTotal = safeDiv(g16Sum, prodAll);
-  const fmmReals = fmmSums.map((v) => safeDiv(v, prodAll));
-  // Nodos hardcodeados en el Excel (valor fijo; no responden a datos)
-  const tratamientoReal = hasData ? 0.04 : null;           // AG64
-  const plantaRecupReal = hasData ? -0.11 : null;          // AG83
-  const productoReal = hasData ? 1.0485 : null;            // AG98
-  const cero = hasData ? 0 : null;                         // nodos en 0 en el Excel
+  // Cada filtro: BC = ((FMMn × J13) / G16) / L3 — su parte del retrolavado FFMM.
+  const fmmReals = fmmSums.map((v) => (hasData && G16 > 0 ? ((v * J13) / G16) / L3 : null));
+  const fmmBPcadaUno = nFmm ? B.multimedia / nFmm : null;  // BB = AM49 / nº de filtros
+  const azudReal = d(N19);                                 // AN53 = N19/L3
+  const agPlusReal = d(O19);                               // AN58 = O19/L3
+  const nanoReal = d(K13 + L13);                           // AN68 = (K13+L13)/L3
+  const nano1Real = d(K13), nano2Real = d(L13);            // AT66 = K13/L3 · AT71 = L13/L3
+  const abatReal = hasData ? 0 : null;                     // AN78 = 0
+  const tratamReal = add(fmmReal, azudReal, agPlusReal, nanoReal, abatReal);
+  const tratamBP = B.multimedia + B.azud + B.agPlus + B.nano + B.abatidores;
 
-  // Real de Elaboración = Σ de los 5 componentes de nivel 1 que ya tienen dato.
-  const compReals = [bothReal, aguaRecupReal, tratamientoReal, plantaRecupReal, productoReal];
-  const mapped = compReals.filter((v) => v !== null);
-  const elabReal = mapped.length ? mapped.reduce((a, b) => a + b, 0) : null;
+  // ── Agua Recuperación (AG47 / AH47) ──
+  const aguaRecupReal = d(M19);                            // AH47 = M19/L3
+
+  // ── Planta Recuperación (AG82 / AH82) ──
+  const wur1Real = hasData ? -I25 / L3 : null;             // AN81 = −I25/L3
+  const wur2Real = hasData ? -M25 / L3 : null;             // AN86 = −M25/L3
+  const plantaRecReal = add(wur1Real, wur2Real);
+  const recPl1 = safeDiv(I25, H25);                        // AN82 = I25/H25
+  const recPl2 = safeDiv(M25, M25 + N25);                  // AN87 = M25/(M25+N25)
+
+  // ── Producto (AG98 / AH98) ──
+  const AH24 = safeDiv(R10, H3);                           // AH24 = R10/H3
+  const AH32 = d(L10);                                     // AH32 = L10/L3
+  const roPeqReal = d(G22);                                // AN91 = G22/L3
+  const mezclaReal = hasData ? (H22 - (AH32 ?? 0) - (AH24 ?? 0)) / L3 : null; // AN96
+  const azucarReal = d(L25);                               // AN101 = L25/L3
+  const desairReal = d(K16 + L16);                         // AN104 = (K16+L16)/L3
+  const postMixReal = d(Q13);                              // AN107 = Q13/L3
+  const prepAReal = d(F28), prepBReal = d(G28), prepCReal = d(H28); // AT107/AT110/AT113
+  const prepReal = add(prepAReal, prepBReal, prepCReal);   // AN110
+  const matrizReal = d(I28);                               // AN113 = I28/L3
+  const productoReal = add(roPeqReal, mezclaReal, azucarReal, desairReal, postMixReal, prepReal, matrizReal);
+  // AG98 = AM96 + AM101 + AM104 + AM107 + AM110 (el Excel no suma AM113 aquí)
+  const productoBP = B.mezcla + B.azucar + B.desaireadores + B.postMix + B.estPrep;
+
+  // ── Raíz: Elaboración (AA72 / AB72) ──
+  const elabBP = cipEnjBP + tratamBP + B.aguaRecup + B.plantaRecup + productoBP;
+  const elabReal = add(cipEnjReal, tratamReal, aguaRecupReal, plantaRecReal, productoReal);
 
   const bpColor = (real, bp) => (real === null || bp === null || bp === undefined ? 'var(--text)' : (real <= bp ? 'var(--ok)' : 'var(--bad)'));
   const card = (label, bp, real, foot, cls = '') => `<div class="kpi-card${cls ? ' ' + cls : ''}" style="--kpi-accent:#9a3412">
@@ -1744,36 +1789,51 @@ function renderElaboracion(root) {
     </div>`;
   };
 
+  const cero = hasData ? 0 : null;
+
   const tratChildren =
-    branch('agplus', 'AG Plus · BP vs Real', null, agPlus, 'AG Plus (O19) ÷ producción L1–L12 + PMIX', 'kpi-card-sub',
+    branch('fmm', 'Filtro Multimedia · BP vs Real', bp(B.multimedia), fmmReal, 'AN49 = P13 (retrolavado FFMM) ÷ L3', 'kpi-card-sub',
+      (nFmm
+        ? fmmReals.map((v, i) => card(`Filtro Multimedia ${i + 1}`, bp(fmmBPcadaUno), v,
+            `BC = (FMM${i + 1} × J13 ÷ G16) ÷ L3`, 'kpi-card-sub2')).join('')
+        : card('Filtro Multimedia', null, null, 'sin datos en el Excel', 'kpi-card-sub2'))) +
+    card('Filtro Azud · BP vs Real', bp(B.azud), azudReal, 'AN53 = N19 (retrolavado Azud) ÷ L3', 'kpi-card-sub') +
+    branch('agplus', 'AG Plus · BP vs Real', bp(B.agPlus), agPlusReal, 'AN58 = O19 (retrolavado AG Plus) ÷ L3', 'kpi-card-sub',
       card('AG Plus 1', null, null, 'VLOOKUP #N/A en el Excel', 'kpi-card-sub2') +
       card('AG Plus 2', null, null, 'VLOOKUP #N/A en el Excel', 'kpi-card-sub2') +
       card('AG Plus 3', null, null, 'VLOOKUP #N/A en el Excel', 'kpi-card-sub2')) +
-    branch('nano', 'Nano filtración · BP vs Real', null, nanoFilt, '(Rechazo Nano 1 + 2) ÷ 100.000', 'kpi-card-sub',
-      card('Nano filtración 1', null, nanoF1, 'Rechazo Nano 1 ÷ 100.000', 'kpi-card-sub2') +
-      card('Nano filtración 2', null, nanoF2, 'Rechazo Nano 2 ÷ 100.000', 'kpi-card-sub2')) +
-    branch('fmm', 'Filtro Multimedia · BP vs Real', null, fmmTotal, 'FFMM (G16) ÷ producción L1–L12 + PMIX', 'kpi-card-sub',
-      (nFmm
-        ? fmmReals.map((v, i) => card(`Filtro Multimedia ${i + 1}`, null, v, `FMM${i + 1} ÷ producción L1–L12 + PMIX`, 'kpi-card-sub2')).join('')
-        : card('Filtro Multimedia', null, null, 'sin datos en el Excel', 'kpi-card-sub2'))) +
-    branch('abat', 'Abatidores de arsénico · BP vs Real', null, cero, 'sin datos en el Excel (0)', 'kpi-card-sub',
-      card('Filtro AS Etapa 1', null, cero, 'sin datos (0)', 'kpi-card-sub2') +
-      card('Filtro AS Etapa 2', null, cero, 'sin datos (0)', 'kpi-card-sub2') +
-      card('Filtro AS Etapa 3', null, cero, 'sin datos (0)', 'kpi-card-sub2'));
+    branch('nano', 'Nano filtración · BP vs Real', bp(B.nano), nanoReal, 'AN68 = (K13 + L13) ÷ L3', 'kpi-card-sub',
+      card('Nano filtración 1', bp(B.nano / 2), nano1Real, 'AT66 = K13 (rechazo nano 1) ÷ L3', 'kpi-card-sub2') +
+      card('Nano filtración 2', bp(B.nano / 2), nano2Real, 'AT71 = L13 (rechazo nano 2) ÷ L3', 'kpi-card-sub2')) +
+    branch('abat', 'Abatidores de arsénico · BP vs Real', bp(B.abatidores), abatReal, 'AN78 · sin datos en el Excel (0)', 'kpi-card-sub',
+      card('Filtro AS Etapa 1', cero, cero, 'sin datos (0)', 'kpi-card-sub2') +
+      card('Filtro AS Etapa 2', cero, cero, 'sin datos (0)', 'kpi-card-sub2') +
+      card('Filtro AS Etapa 3', cero, cero, 'sin datos (0)', 'kpi-card-sub2'));
 
   const plrecChildren =
-    card('Recuperación Planta 1', null, recupPl1, 'I25 ÷ H25', 'kpi-card-sub') +
-    card('Recuperación Planta 2', null, recupPl2, 'M25 ÷ (M25 + N25)', 'kpi-card-sub');
+    card('WUR 1 · BP vs Real', bp(B.wur1), wur1Real, 'AN81 = −I25 (permeado WUR 1) ÷ L3', 'kpi-card-sub') +
+    card('WUR 2 · BP vs Real', bp(B.wur2), wur2Real, 'AN86 = −M25 (permeado WUR 2) ÷ L3', 'kpi-card-sub') +
+    card('Recuperación Planta 1', bp(B.recPlanta1), recPl1, 'AN82 = I25 ÷ H25 (eficiencia WUR 1)', 'kpi-card-sub') +
+    card('Recuperación Planta 2', bp(B.recPlanta2), recPl2, 'AN87 = M25 ÷ (M25 + N25)', 'kpi-card-sub');
 
   const prodChildren =
-    branch('mezcla', 'Mezcla Agua Producto · BP vs Real', null, mezclaReal, '(H22 − AH32 − AH24) ÷ producción L1–L12 + PMIX', 'kpi-card-sub',
-      card('Filtro 1 (30 m³)', null, cero, 'sin datos (0)', 'kpi-card-sub2') +
-      card('Filtro 2 (30 m³)', null, cero, 'sin datos (0)', 'kpi-card-sub2') +
-      card('Filtro 3 (30 m³)', null, cero, 'sin datos (0)', 'kpi-card-sub2'));
+    card('RO Pequeña · BP vs Real', bp(B.roPequena), roPeqReal, 'AN91 = G22 (rechazo RO pequeña) ÷ L3', 'kpi-card-sub') +
+    branch('mezcla', 'Mezcla Agua Producto · BP vs Real', bp(B.mezcla), mezclaReal, 'AN96 = (H22 − AH32 − AH24) ÷ L3', 'kpi-card-sub',
+      card('Filtro 1 (30 m³)', cero, cero, 'sin datos (0)', 'kpi-card-sub2') +
+      card('Filtro 2 (30 m³)', cero, cero, 'sin datos (0)', 'kpi-card-sub2') +
+      card('Filtro 3 (30 m³)', cero, cero, 'sin datos (0)', 'kpi-card-sub2')) +
+    card('Azúcar · BP vs Real', bp(B.azucar), azucarReal, 'AN101 = L25 (caudalímetro azúcar) ÷ L3', 'kpi-card-sub') +
+    card('Desaireadores · BP vs Real', bp(B.desaireadores), desairReal, 'AN104 = (K16 + L16) ÷ L3', 'kpi-card-sub') +
+    card('Post Mix · BP vs Real', bp(B.postMix), postMixReal, 'AN107 = Q13 (consumo PM H₂O) ÷ L3', 'kpi-card-sub') +
+    branch('prep', 'Estaciones de Preparación · BP vs Real', bp(B.estPrep), prepReal, 'AN110 = (F28 + G28 + H28) ÷ L3', 'kpi-card-sub',
+      card('Estación de Prep. A', bp(B.estPrepCadaUna), prepAReal, 'AT107 = F28 ÷ L3', 'kpi-card-sub2') +
+      card('Estación de Prep. B', bp(B.estPrepCadaUna), prepBReal, 'AT110 = G28 ÷ L3', 'kpi-card-sub2') +
+      card('Estación de Prep. C', bp(B.estPrepCadaUna), prepCReal, 'AT113 = H28 ÷ L3 (registrada en litros)', 'kpi-card-sub2')) +
+    card('Matriz 500 · BP vs Real', bp(B.matriz500), matrizReal, 'AN113 = I28 (matriz 500) ÷ L3', 'kpi-card-sub');
 
   const cipChildren =
-    card('Enjuague de líneas · BP vs Real', ENJUAGUE_BP, enjReal, 'enjuague de líneas ÷ producción L1–L12 + PMIX', 'kpi-card-sub') +
-    card('CIP · BP vs Real', CIP_BP, cipReal, 'CIP ÷ producción L1–L12 + PMIX', 'kpi-card-sub');
+    card('Enjuague de líneas · BP vs Real', bp(B.enjuague), enjReal, 'AN41 = P10 (enjuague de líneas) ÷ L3', 'kpi-card-sub') +
+    card('CIP · BP vs Real', bp(B.cip), cipReal, 'AN45 = H13 (CIP) ÷ L3', 'kpi-card-sub');
 
   root.innerHTML = `
     ${pageHeader('Elaboración', 'Preparación de jarabes y mezclas — consumo de agua y producción')}
@@ -1781,18 +1841,18 @@ function renderElaboracion(root) {
       <div class="kpi-card kpi-card-toggle" id="elab-toggle" style="--kpi-accent:#c026d3" role="button" tabindex="0" aria-expanded="false" aria-controls="elab-detalle" title="Toca para ver los componentes de elaboración">
         <div class="kpi-head"><span class="kpi-label">Elaboración · BP vs Real</span><span class="toggle-caret" id="elab-caret">▸</span></div>
         <div class="bp-kpi-rows">
-          <div class="bp-kpi-row"><span class="bp-kpi-name">BP</span><span class="bp-kpi-num">${fmt(ELABORACION_BP, 3)}</span></div>
-          <div class="bp-kpi-row"><span class="bp-kpi-name">real</span><span class="bp-kpi-num" style="color:${bpColor(elabReal, ELABORACION_BP)}">${fmt(elabReal, 3)}</span></div>
+          <div class="bp-kpi-row"><span class="bp-kpi-name">BP</span><span class="bp-kpi-num">${fmt(bp(elabBP), 3)}</span></div>
+          <div class="bp-kpi-row"><span class="bp-kpi-name">real</span><span class="bp-kpi-num" style="color:${bpColor(elabReal, bp(elabBP))}">${fmt(elabReal, 3)}</span></div>
         </div>
-        <div class="kpi-foot"><span class="kpi-target">Σ componentes ÷ producción L1–L12 + PMIX · toca para desglose</span></div>
+        <div class="kpi-foot"><span class="kpi-target">AA72 / AB72 = Σ de los 5 componentes · toca para desglose</span></div>
       </div>
     </div>
     <div class="kpi-grid" id="elab-detalle" hidden>
-      ${branch('cip', 'CIP + Enjuague de líneas · BP vs Real', bothBP, bothReal, '(CIP + Enjuague) ÷ producción L1–L12 + PMIX', '', cipChildren)}
-      ${card('Agua Recuperación · BP vs Real', AGUA_RECUP_BP, aguaRecupReal, '(Pozos+Pot − Agua potable 25% − G16) ÷ producción L1–L12 + PMIX')}
-      ${branch('trat', 'Tratamiento de agua · BP vs Real', null, tratamientoReal, 'valor fijo del Excel (0,04)', '', tratChildren)}
-      ${branch('plrec', 'Planta Recuperación · BP vs Real', null, plantaRecupReal, 'valor fijo del Excel (−0,11)', '', plrecChildren)}
-      ${branch('prod', 'Producto · BP vs Real', null, productoReal, 'valor fijo del Excel (1,05)', '', prodChildren)}
+      ${branch('cip', 'CIP + Enjuague de líneas · BP vs Real', bp(cipEnjBP), cipEnjReal, 'AG43 / AH43 = enjuague + CIP', '', cipChildren)}
+      ${card('Agua Recuperación · BP vs Real', bp(B.aguaRecup), aguaRecupReal, 'AH47 = M19 ÷ L3, con M19 = (H3 − F16) − G16')}
+      ${branch('trat', 'Tratamiento de agua · BP vs Real', bp(tratamBP), tratamReal, 'AG64 / AH64 = Σ multimedia + azud + AG Plus + nano + abatidores', '', tratChildren)}
+      ${branch('plrec', 'Planta Recuperación · BP vs Real', bp(B.plantaRecup), plantaRecReal, 'AH82 = AN81 + AN86 (permeados WUR 1 y 2)', '', plrecChildren)}
+      ${branch('prod', 'Producto · BP vs Real', bp(productoBP), productoReal, 'AG98 / AH98 = Σ RO pequeña + mezcla + azúcar + desaireadores + post mix + estaciones + matriz', '', prodChildren)}
     </div>`;
 
   const wireToggle = (btnId, panelId, caretId) => {
@@ -1982,8 +2042,13 @@ function emptyRecord(date) {
     potableRaw: 0,    // Pozos!P «Agua potable 25%» crudo, sin recortar (F16, Agua Recuperación)
     recupG16: 0,      // G16 del árbol semanal ('Permeado- Servicio- Azucar'!BF)
     fmm: [],          // detalle diario por filtro multimedia (FMM1…FMMn), m³
-    // Árbol de tratamiento (crudos, replican el Excel). BU-block, AY-block y Lavadoras.
-    tree: { cd: 0, ce: 0, cz: 0, dx: 0, dy: 0, eb: 0, ec: 0, cp: 0, cr: 0, s: 0, t: 0, lavR: 0 },
+    // Celdas base del árbol semanal (crudas, replican el Excel): bloque BU y
+    // bloque AY de 'Permeado- Servicio- Azucar', Lavadoras y EFIC-OEE.
+    tree: {
+      cd: 0, ce: 0, cz: 0, dx: 0, dy: 0, eb: 0, ec: 0, cp: 0, cr: 0, s: 0, t: 0, lavR: 0,
+      p10: 0, p13: 0, q13: 0, h13: 0, k16: 0, l16: 0, g22: 0, j28: 0,
+      n19: 0, l25: 0, i28: 0, f28: 0, g28: 0, h28: 0, j13: 0, k28: 0,
+    },
   };
   TODAS_LAS_LINEAS.forEach((l) => { r.lineas[l.id] = { agua: 0, produccion: 0 }; });
   return r;
@@ -2295,7 +2360,9 @@ function permServRecupMap(wb) {
   const ws = wb.Sheets['Permeado- Servicio- Azucar'];
   if (!ws) return map;
   const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, blankrows: true, defval: null });
-  const AY = 50, S = 18, T = 19;
+  // S/T = Caldera 1/2 (L10 = M10+N10) · G = «Rechazo FMM» (J13, reparto de los
+  // filtros multimedia). Todas viven en el mismo bloque con fecha en AY.
+  const AY = 50, S = 18, T = 19, J13 = 6;
   const fmm = findFmmBlock(grid);
   const num = (v) => (typeof v === 'number' && isFinite(v) ? v : 0);
   for (const row of grid) {
@@ -2306,22 +2373,67 @@ function permServRecupMap(wb) {
     if (!iso) continue;
     map.set(iso, {
       bf: num(row[fmm.total]), s: num(row[S]), t: num(row[T]),
+      j13: num(row[J13]),
       fmm: fmm.cols.map((c) => num(row[c])),
     });
   }
   return map;
 }
 
-/* ─── Árbol de tratamiento: hoja 'Permeado- Servicio- Azucar', bloque con fecha
-   en la columna BU (filas 4-34). Columnas usadas por el árbol semanal:
-   CD/CE = Rechazo Nano 1/2 · CZ = AG Plus (O19) · DX/DY = Recup. Planta 1
-   · EB/EC = Recup. Planta 2 · CP/CR = Mezcla Producto (K22/J22). ─── */
+/* ─── Bloque de consumos de 'Permeado- Servicio- Azucar' con la fecha en la
+   columna BU (filas 4-34). Es el origen de casi todas las celdas base del
+   árbol semanal «Arbol Agua Semanal 2», que a su vez alimenta la página
+   Elaboración. Cada entrada lleva el nombre de la celda del árbol que
+   alimenta, para poder seguir la trazabilidad con el Excel a la vista.
+
+   Las columnas se localizan por encabezado (fila 2 de la hoja) y sólo si eso
+   falla se usa la posición histórica, de modo que el dashboard sigue leyendo
+   bien un Mapa de Agua al que le hayan insertado o movido columnas. ─── */
+const PERM_BU_DEFS = [
+  // clave  celda árbol   encabezado (normalizado)                            respaldo
+  ['p10', (l) => l.includes('enjuague de linea'), 74],              // P10  Enjuague de líneas
+  ['p13', (l) => l.includes('retrolavado ffmm'), 75],               // P13  Retrolavado FFMM
+  ['cd', (l) => l.includes('agua rechazo nano 1'), 81],             // K13  Rechazo Nano 1
+  ['ce', (l) => l.includes('agua rechazo nano 2'), 82],             // L13  Rechazo Nano 2
+  ['q13', (l) => l.includes('post mix'), 83],                       // Q13  Consumo PM H2O
+  ['h13', (l) => l === 'cip', 84],                                  // H13  CIP
+  ['k16', (l) => l.includes('desaireador a'), 87],                  // K16  Desaireador A
+  ['l16', (l) => l.includes('desaireador b'), 88],                  // L16  Desaireador B
+  ['g22', (l) => l.includes('rechazo ro pequena'), 91],             // G22  Rechazo RO Pequeña
+  ['cp', (l) => l.includes('permeado ro grande'), 93],              // K22  Permeado RO Grande
+  ['cr', (l) => l.includes('permeado mezcla ro grande'), 95],       // J22  Permeado Mezcla RO Grande
+  ['j28', (l) => l.includes('enviado l-10') || l.includes('enviado l10'), 97], // J28 Envío Ozonificador
+  ['n19', (l) => l.includes('filtro azud'), 102],                   // N19  Retrolavado Filtro Azud
+  ['cz', (l) => l.includes('filtro agplus') || l.includes('filtro ag plus'), 103], // O19 Filtro AG Plus
+  ['l25', (l) => l.includes('caudalimetro 1'), 125],                // L25  Caudalímetro 1 (Azúcar)
+  ['dx', (l) => l.includes('wur entrada e1'), 127],                 // H25  WUR 1 Entrada
+  ['dy', (l) => l.includes('wur permeado e1'), 128],                // I25  WUR 1 Permeado
+  ['eb', (l) => l.includes('wur permeado e2'), 131],                // M25  WUR 2 Permeado
+  ['ec', (l) => l.includes('wur rechazo e2'), 132],                 // N25  WUR 2 Rechazo
+  ['i28', (l) => l.includes('matriz 500'), 135],                    // I28  Matriz 500
+  ['f28', (l) => l.includes('estacion de preparacion a'), 136],     // F28  Estación de Prep. A
+  ['g28', (l) => l.includes('estacion de preparacion b'), 137],     // G28  Estación de Prep. B
+  ['h28', (l) => l.includes('estacion de preparacion c'), 138],     // H28  Estación de Prep. C (en litros)
+];
+
 function permServTreeMap(wb) {
   const map = new Map();
   const ws = wb.Sheets['Permeado- Servicio- Azucar'];
   if (!ws) return map;
   const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, blankrows: true, defval: null });
-  const BU = 72, C = { cd: 81, ce: 82, cz: 103, dx: 127, dy: 128, eb: 131, ec: 132, cp: 93, cr: 95 };
+  const BU = 72;
+  // Resolución de columnas por encabezado en las primeras filas de la hoja.
+  const C = {};
+  for (const [key, match, fallback] of PERM_BU_DEFS) {
+    let found = -1;
+    for (let r = 0; r < Math.min(grid.length, 4) && found < 0; r++) {
+      const row = grid[r] || [];
+      for (let c = BU; c < row.length; c++) {
+        if (match(normLabel(row[c]))) { found = c; break; }
+      }
+    }
+    C[key] = found >= 0 ? found : fallback;
+  }
   const num = (v) => (typeof v === 'number' && isFinite(v) ? v : 0);
   for (const row of grid) {
     if (!row) continue;
@@ -2331,7 +2443,39 @@ function permServTreeMap(wb) {
     if (!iso) continue;
     const o = {};
     for (const k in C) o[k] = num(row[C[k]]);
+    // La Estación de Preparación C se registra en litros (el Excel divide /1000).
+    o.h28 = o.h28 / 1000;
     map.set(iso, o);
+  }
+  return map;
+}
+
+/* ─── K28 «Diferencia Ajustable P.SILVA» de la hoja 'EFIC-OEE.': tercer
+   sumando de L3 (L3 = M3 + N3 + K28, la producción que sirve de denominador
+   a toda la página Elaboración). Fila localizada por etiqueta en la col. B y
+   fecha en la fila de encabezado del mismo bloque. ─── */
+function eficAjusteMap(wb) {
+  const map = new Map();
+  const ws = wb.Sheets['EFIC-OEE.'];
+  if (!ws) return map;
+  const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, blankrows: true, defval: null });
+  let rowIdx = -1;
+  for (let r = 0; r < grid.length; r++) {
+    if (normLabel((grid[r] || [])[1]).includes('diferencia ajustable')) { rowIdx = r; break; }
+  }
+  if (rowIdx < 0) return map;
+  // Fila de fechas del bloque: la más cercana por encima con celdas Date.
+  let dateRow = -1;
+  for (let r = rowIdx; r >= 0; r--) {
+    if ((grid[r] || []).some((c) => c instanceof Date && !isNaN(c))) { dateRow = r; break; }
+  }
+  if (dateRow < 0) return map;
+  const drow = grid[dateRow], vrow = grid[rowIdx] || [];
+  for (let c = 0; c < drow.length; c++) {
+    const d = drow[c];
+    if (!(d instanceof Date) || isNaN(d)) continue;
+    const iso = toISODate(d);
+    if (iso) map.set(iso, typeof vrow[c] === 'number' && isFinite(vrow[c]) ? vrow[c] : 0);
   }
   return map;
 }
@@ -2455,6 +2599,7 @@ async function handleFile(e) {
           const e = ayMap.get(r.date);
           if (e) {
             r.recupG16 = round1(e.bf); r.tree.s = round1(e.s); r.tree.t = round1(e.t);
+            r.tree.j13 = round1(e.j13);
             r.fmm = (e.fmm || []).map(round1);
           }
         });
@@ -2469,6 +2614,12 @@ async function handleFile(e) {
         if (lavMap.size) records.forEach((r) => {
           const v = lavMap.get(r.date);
           if (v !== undefined) r.tree.lavR = round1(v);
+        });
+        // K28 «Diferencia Ajustable» de EFIC-OEE (tercer sumando de L3)
+        const ajusteMap = eficAjusteMap(wb);
+        if (ajusteMap.size) records.forEach((r) => {
+          const v = ajusteMap.get(r.date);
+          if (v !== undefined) r.tree.k28 = round1(v);
         });
       } else {
         const ws = wb.Sheets[wb.SheetNames[0]];
