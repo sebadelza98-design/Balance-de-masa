@@ -723,6 +723,7 @@ const ELAB_BP = {
   azud: 0.01,           // AM53
   agPlus: 0.01,         // AM58
   nano: 0.0,            // AM68 = K3 × AM70 (K3 «BP Mes Ratio» viene vacío)
+  rechazoNano: 17,      // AM70 = 0,17 · se muestra como porcentaje (17 %)
   abatidores: 0.0,      // AM78
   aguaRecup: -0.20,     // AG47
   plantaRecup: -0.11,   // AG82
@@ -1226,14 +1227,20 @@ function gapBadge(pct, tone) {
 const dayLabels = () => RECS.map((r) => fmtDayShort(r.date));
 
 /* ── 10.1 Planta General ── */
+/* Indicadores que ofrece el selector de la tendencia diaria. */
 const KPI_ORDER = ['ratioAgua','produccion','consumoPozos','consumoNano','rechazoNano','recuperacionWUR','eficienciaRO'];
+/* Tarjetas de la parte superior de Planta General. «% Rechazo Nano» no está
+   aquí: vive en Elaboración, dentro del desglose de Nano filtración, que es
+   donde el Mapa de Agua lo tiene (nodo «Rechazo», BP AM70 = 0,17). Sigue
+   disponible en el selector de tendencia diaria de esta misma página. */
+const KPI_CARDS = KPI_ORDER.filter((k) => k !== 'rechazoNano');
 
 function renderPlanta(root) {
   const kpis = computePlantKpis(RECS) ?? {};
   const dailyK = RECS.map((r) => computePlantKpis([r]));
   const ranking = consumerRanking(RECS);
 
-  const cards = KPI_ORDER.map((key) => {
+  const cards = KPI_CARDS.map((key) => {
     const def = KPI_DEFS[key];
     return kpiCard({
       label: def.label, value: kpis[key], unit: def.unit, decimals: def.decimals,
@@ -1730,6 +1737,14 @@ function renderElaboracion(root) {
   const agPlusReal = d(O19);                               // AN58 = O19/L3
   const nanoReal = d(K13 + L13);                           // AN68 = (K13+L13)/L3
   const nano1Real = d(K13), nano2Real = d(L13);            // AT66 = K13/L3 · AT71 = L13/L3
+  // Nodo «Rechazo» del árbol (AM70 = 0,17 · AN70 = O13). O13 divide el rechazo
+  // de las nanos entre su alimentación; en el Excel se toma de las columnas
+  // EQ/EU de 'Permeado- Servicio- Azucar', que vienen vacías y dan #DIV/0!.
+  // Aquí se usa la misma definición pero desde METROSCUB, que sí trae el dato:
+  // «Rechazo nano» ÷ «Total Nano».
+  const nanoAlimSum = sum(RECS.map((r) => r.nano.alimentacion));
+  const nanoRechSum = sum(RECS.map((r) => r.nano.rechazo));
+  const rechazoNanoReal = safeDiv(nanoRechSum * 100, nanoAlimSum);
   const abatReal = hasData ? 0 : null;                     // AN78 = 0
   const tratamReal = add(fmmReal, azudReal, agPlusReal, nanoReal, abatReal);
   const tratamBP = B.multimedia + B.azud + B.agPlus + B.nano + B.abatidores;
@@ -1764,11 +1779,16 @@ function renderElaboracion(root) {
   const elabReal = add(cipEnjReal, tratamReal, aguaRecupReal, plantaRecReal, productoReal);
 
   const bpColor = (real, bp) => (real === null || bp === null || bp === undefined ? 'var(--text)' : (real <= bp ? 'var(--ok)' : 'var(--bad)'));
-  const card = (label, bp, real, foot, cls = '') => `<div class="kpi-card${cls ? ' ' + cls : ''}" style="--kpi-accent:#9a3412">
+  // Los nodos del árbol son ratios adimensionales (÷ L3); `show` permite que un
+  // nodo que sí tiene unidad —el % de rechazo de las nanos— se muestre como
+  // porcentaje en lugar de como fracción.
+  const asRatio = (v) => fmt(v, 3);
+  const asPct = (v) => (v === null || v === undefined ? '—' : fmtPct(v, 1));
+  const card = (label, bp, real, foot, cls = '', show = asRatio) => `<div class="kpi-card${cls ? ' ' + cls : ''}" style="--kpi-accent:#9a3412">
       <div class="kpi-head"><span class="kpi-label">${label}</span></div>
       <div class="bp-kpi-rows">
-        <div class="bp-kpi-row"><span class="bp-kpi-name">BP</span><span class="bp-kpi-num">${fmt(bp, 3)}</span></div>
-        <div class="bp-kpi-row"><span class="bp-kpi-name">real</span><span class="bp-kpi-num" style="color:${bpColor(real, bp)}">${fmt(real, 3)}</span></div>
+        <div class="bp-kpi-row"><span class="bp-kpi-name">BP</span><span class="bp-kpi-num">${show(bp)}</span></div>
+        <div class="bp-kpi-row"><span class="bp-kpi-name">real</span><span class="bp-kpi-num" style="color:${bpColor(real, bp)}">${show(real)}</span></div>
       </div>
       <div class="kpi-foot"><span class="kpi-target">${foot}</span></div>
     </div>`;
@@ -1804,7 +1824,9 @@ function renderElaboracion(root) {
       card('AG Plus 3', null, null, 'VLOOKUP #N/A en el Excel', 'kpi-card-sub2')) +
     branch('nano', 'Nano filtración · BP vs Real', bp(B.nano), nanoReal, 'AN68 = (K13 + L13) ÷ L3', 'kpi-card-sub',
       card('Nano filtración 1', bp(B.nano / 2), nano1Real, 'AT66 = K13 (rechazo nano 1) ÷ L3', 'kpi-card-sub2') +
-      card('Nano filtración 2', bp(B.nano / 2), nano2Real, 'AT71 = L13 (rechazo nano 2) ÷ L3', 'kpi-card-sub2')) +
+      card('Nano filtración 2', bp(B.nano / 2), nano2Real, 'AT71 = L13 (rechazo nano 2) ÷ L3', 'kpi-card-sub2') +
+      card('% Rechazo Nano', bp(B.rechazoNano), rechazoNanoReal,
+        'AN70 = rechazo nano ÷ alimentación nano', 'kpi-card-sub2', asPct)) +
     branch('abat', 'Abatidores de arsénico · BP vs Real', bp(B.abatidores), abatReal, 'AN78 · sin datos en el Excel (0)', 'kpi-card-sub',
       card('Filtro AS Etapa 1', cero, cero, 'sin datos (0)', 'kpi-card-sub2') +
       card('Filtro AS Etapa 2', cero, cero, 'sin datos (0)', 'kpi-card-sub2') +
