@@ -1093,20 +1093,20 @@ const tooltipNumber = (unit, decimals) => ({
     return ` ${ctx.dataset.label}: ${fmt(v, decimals)} ${unit}`;
   },
 });
-const scalesXY = (unit, decimals, { stacked = false, yMin } = {}) => ({
+const scalesXY = (unit, decimals, { stacked = false, yMin, yMax } = {}) => ({
   x: { stacked, grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
-  y: { stacked, min: yMin, grid: { color: '#1b2742' }, ticks: { callback: (v) => fmtCompact(v) } },
+  y: { stacked, min: yMin, max: yMax, grid: { color: '#1b2742' }, ticks: { callback: (v) => fmtCompact(v) } },
 });
 
-function lineDataset(label, data, color, { dashed = false, fillArea = false, stack = false } = {}) {
+function lineDataset(label, data, color, { dashed = false, fillArea = false, stack = false, spanGaps = true, pointRadius = 0 } = {}) {
   return {
     label, data,
     borderColor: color,
     backgroundColor: fillArea ? color + '3d' : color,
     fill: fillArea ? (stack ? (stack === 'first' ? 'origin' : '-1') : 'origin') : false,
-    borderWidth: 2, tension: 0.3, pointRadius: 0, pointHoverRadius: 4,
+    borderWidth: 2, tension: 0.3, pointRadius, pointHoverRadius: 4,
     borderDash: dashed ? [6, 4] : undefined,
-    spanGaps: true,
+    spanGaps,
   };
 }
 function metaDataset(value, n, label) {
@@ -1165,10 +1165,10 @@ function kpiCard({ label, value, unit, decimals = 0, accent = '#0891b2', status 
     <div class="kpi-foot">${foot}<span class="kpi-target">${subtitle}</span></div>
   </div>`;
 }
-function chartCard({ span = 12, title, subtitle = '', canvasId, height = 300, actions = '', body = '', cls = '' }) {
+function chartCard({ span = 12, title, subtitle = '', subtitleId = '', canvasId, height = 300, actions = '', body = '', cls = '' }) {
   return `<div class="chart-card span-${span}${cls ? ' ' + cls : ''}">
     <div class="chart-card-head">
-      <div><div class="chart-card-title">${title}</div>${subtitle ? `<div class="chart-card-subtitle">${subtitle}</div>` : ''}</div>
+      <div><div class="chart-card-title">${title}</div>${(subtitle || subtitleId) ? `<div class="chart-card-subtitle"${subtitleId ? ` id="${subtitleId}"` : ''}>${subtitle}</div>` : ''}</div>
       ${(actions || canvasId) ? `<div class="chart-card-actions">${actions}${canvasId ? `<button type="button" class="chart-dl" data-canvas="${canvasId}" title="Descargar gráfico (PNG)" aria-label="Descargar gráfico">⬇</button>` : ''}</div>` : ''}
     </div>
     <div class="chart-body" ${canvasId ? `style="height:${height}px"` : ''}>${canvasId ? `<canvas id="${canvasId}"></canvas>` : body}</div>
@@ -1299,7 +1299,7 @@ function renderPlanta(root) {
     <div class="kpi-grid">${cards}${potableBpCard}</div>
     ${comparacionHTML}
     <div class="chart-grid">
-      ${chartCard({ span: 12, title: 'Tendencia diaria del indicador', subtitle: 'Comportamiento día a día dentro del período', canvasId: 'ch-trend', actions: `<select id="sel-kpi">${kpiOptions}</select>` })}
+      ${chartCard({ span: 12, title: 'Tendencia diaria del indicador', subtitle: 'Comportamiento día a día dentro del período', subtitleId: 'trend-sub', canvasId: 'ch-trend', actions: `<select id="sel-kpi">${kpiOptions}</select>` })}
       ${chartCard({ span: 12, title: 'Distribución del consumo', subtitle: 'Participación por consumidor en el período', canvasId: 'ch-donut' })}
       ${chartCard({ span: 12, title: 'Ranking de consumidores de agua', subtitle: 'Principales consumidores del período (m³)', canvasId: 'ch-rank', height: 340 })}
     </div>`;
@@ -1335,12 +1335,57 @@ function renderPlanta(root) {
     ], monthly, 'month', 'asc');
   }
 
-  /* Tendencia diaria con selector */
+  /* Tendencia diaria con selector.
+
+     Los indicadores que son un cociente (ratio, % de rechazo, % de
+     recuperación) se disparan en los días de parada: el denominador —bebida
+     producida, alimentación a las WUR— cae a valores de redondeo mientras el
+     numerador sigue contando agua de servicios y limpieza. El 3 de mayo, con
+     1,7 m³ de bebida y 224 m³ de pozos, el ratio diario da 187 L/L. Son
+     valores aritméticamente correctos pero sin sentido como indicador diario,
+     y de paso arrasaban la escala: la banda 1–3 L/L, que es donde vive el
+     dato útil y la meta, quedaba comprimida en el 4 % inferior del gráfico.
+
+     Se acota el eje a un rango robusto (valla de Tukey, Q3 + 1,5·RIC,
+     asegurando que la meta siempre quede visible). Los puntos NO se borran:
+     siguen en la serie y en el tooltip, y el subtítulo dice cuántos quedaron
+     fuera de escala y de qué días son.
+
+     Ojo: esto se aplica SÓLO a los indicadores con meta (ratios y
+     porcentajes). En los de volumen —bebida, pozos, nano, m³ de CIP— el
+     máximo del mes no es ruido sino el dato que interesa, así que ahí no se
+     recorta nada y el eje lo decide Chart.js. */
   let trendChart = null;
+  const cuantil = (ord, p) => ord[Math.min(ord.length - 1, Math.max(0, Math.round((ord.length - 1) * p)))];
   const drawTrend = (key) => {
     const def = KPI_DEFS[key];
-    const data = dailyK.map((k) => (k[key] === null ? null : +k[key].toFixed(2)));
-    const datasets = [lineDataset(def.label, data, def.accent)];
+    const data = dailyK.map((k) => (k[key] === null || !isFinite(k[key]) ? null : +k[key].toFixed(def.decimals)));
+
+    let yMax, nota = '';
+    const vals = data.filter((v) => v !== null);
+    const esRatio = def.ok !== undefined;   // sólo ratios y % tienen meta
+    if (esRatio && vals.length >= 5) {
+      const ord = [...vals].sort((a, b) => a - b);
+      const q1 = cuantil(ord, 0.25), q3 = cuantil(ord, 0.75);
+      const valla = q3 + 1.5 * (q3 - q1);
+      const tope = Math.max(valla, def.ok * 1.15);
+      const fuera = data.map((v, i) => (v !== null && v > tope ? i : -1)).filter((i) => i >= 0);
+      if (tope > 0 && fuera.length && fuera.length < vals.length / 2) {
+        yMax = tope;
+        const detalle = fuera.slice(0, 3)
+          .map((i) => `${fmtDayShort(RECS[i].date)} ${fmt(data[i], def.decimals)}`).join(' · ');
+        nota = ` · ${fuera.length} día${fuera.length > 1 ? 's' : ''} fuera de escala: ${detalle}${fuera.length > 3 ? ' …' : ''}`;
+      }
+    }
+    const huecos = data.filter((v) => v === null).length;
+    if (huecos) nota += ` · ${huecos} día${huecos > 1 ? 's' : ''} sin dato (línea cortada)`;
+
+    const sub = document.getElementById('trend-sub');
+    if (sub) sub.textContent = 'Comportamiento día a día dentro del período' + nota;
+
+    // spanGaps:false — un día sin producción se ve como corte, no como una
+    // recta que lo atraviesa como si el indicador hubiese sido normal.
+    const datasets = [lineDataset(def.label, data, def.accent, { spanGaps: false, pointRadius: 2 })];
     if (def.ok !== undefined) datasets.push(metaDataset(def.ok, data.length, `Meta ${fmt(def.ok, def.decimals)}`));
     if (trendChart) { trendChart.destroy(); charts = charts.filter((c) => c !== trendChart); }
     trendChart = makeChart('ch-trend', {
@@ -1349,7 +1394,7 @@ function renderPlanta(root) {
       options: {
         maintainAspectRatio: false,
         plugins: { legend: { display: def.ok !== undefined }, tooltip: { callbacks: tooltipNumber(def.unit, def.decimals) } },
-        scales: scalesXY(def.unit, def.decimals),
+        scales: scalesXY(def.unit, def.decimals, { yMax }),
       },
     });
   };
