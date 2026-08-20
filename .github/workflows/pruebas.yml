@@ -1,0 +1,38 @@
+name: Pruebas
+
+on:
+  push:
+    paths:
+      - "emisiones/**"
+      - "tests/**"
+      - "emisiones_app.py"
+      - ".github/workflows/pruebas.yml"
+  pull_request:
+    paths:
+      - "emisiones/**"
+      - "tests/**"
+      - "emisiones_app.py"
+
+permissions:
+  contents: read
+
+jobs:
+  unittest:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Ejecutar las pruebas
+        run: python -m unittest discover -s tests -t . -v
+      - name: Comprobar la línea de comandos
+        run: |
+          python emisiones_app.py --version
+          python emisiones_app.py plantilla /tmp/datos.csv
+          python emisiones_app.py calcular /tmp/datos.csv --html /tmp/reporte.html

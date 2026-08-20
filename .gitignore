@@ -31,6 +31,12 @@ MANIFEST
 #   before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+# …pero la receta de la calculadora de emisiones sí se versiona:
+!emisiones.spec
+
+# Reportes e inventarios generados al usar la calculadora
+reporte_emisiones.html
+inventario_emisiones.json
 
 # Installer logs
 pip-log.txt
