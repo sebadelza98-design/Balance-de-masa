@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Datos y resultados del consolidador meteorologico
+datos_meteo/*
+!datos_meteo/.gitkeep
+salida_meteo/
